@@ -171,7 +171,7 @@ const MONTHS = ["Січень","Лютий","Березень","Квітень",
 const MONTHS_GEN = ["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
 
 const tg = window.Telegram && window.Telegram.WebApp;
-const inTg = !!(tg && tg.initData);
+const inTg = !!(tg && tg.platform && tg.platform !== "unknown");   // відкрито всередині Telegram
 if (inTg) { document.documentElement.classList.add("tg"); tg.ready(); tg.expand(); }
 
 /* ---------- зв'язок з ботом (Apps Script) ---------- */
@@ -190,6 +190,9 @@ async function api(method, payload) {
 async function boot() {
   if (!inTg || !API) {                      // поза Telegram — демо
     IS_DEMO = true; init(DEMO[QS.get("demo")] || DEMO.default); return;
+  }
+  if (!tg.initData) {                       // відкрито кнопкою звичайної клавіатури — Telegram не дає підпису
+    return renderFatal("Календар відкрито не тією кнопкою.", "Закрийте це вікно і натисніть синю кнопку «📝 Подати запит» зліва від поля вводу в чаті з ботом.");
   }
   renderLoading();
   try {
