@@ -130,7 +130,7 @@
 </style>
 </head>
 <body>
-<div class="wrap" id="app"></div>
+<div class="wrap" id="app"><div class="card done"><div class="big">⏳</div><p style="color:#888">Завантажую календар…</p></div></div>
 <div class="bar" id="bar"><button id="btn"></button></div>
 <div class="toast" id="toast"></div>
 
@@ -275,7 +275,7 @@ function renderFatal(title, how, retry) {
   hideButton();
 }
 function hideButton() {
-  if (inTg) tg.MainButton.hide(); else document.getElementById("bar").style.display = "none";
+  if (inTg) { tg.MainButton.hideProgress(); tg.MainButton.setParams({ is_visible: false }); tg.MainButton.hide(); } else document.getElementById("bar").style.display = "none";
 }
 
 function busyOn(day) {
@@ -567,15 +567,21 @@ function onMain() {
   if (IS_DEMO) { S.result = { ok: true, mode: D.approver ? "sent" : "auto", approver: D.approver }; S.final = ev; S.sent = true; render(); return; }
   S.sending = true; S.serverErr = null; setSending(true);
   api("POST", body).then(res => {
-    S.sending = false; setSending(false);
+    S.sending = false;
+    if (res.ok) {                                   // успіх: кнопку ховаємо, без повернення тексту
+      if (inTg) tg.MainButton.hideProgress();
+      S.result = res; S.final = ev; S.sent = true; render();
+      setTimeout(hideButton, 300);
+      if (inTg) tg.HapticFeedback.notificationOccurred("success");
+      return;
+    }
+    setSending(false);
     if (!res.ok) {
       if (res.auth === false) return renderFatal(res.title, res.how);
       S.serverErr = { title: res.title, how: res.how }; render(); window.scrollTo({ top: 0, behavior: "smooth" });
       if (inTg) tg.HapticFeedback.notificationOccurred("error");
       return;
     }
-    S.result = res; S.final = ev; S.sent = true; render();
-    if (inTg) tg.HapticFeedback.notificationOccurred("success");
   }).catch(() => {
     S.sending = false; setSending(false);
     S.serverErr = { title: "Не вдалося надіслати — немає зв'язку.", how: "Перевірте інтернет і натисніть кнопку ще раз. Запит поки не надіслано." };
