@@ -215,7 +215,8 @@ const parse = s => { const [y, m, d] = s.split("-").map(Number); return { y, m: 
 const toUTC = s => { const p = parse(s); return Date.UTC(p.y, p.m, p.d); };
 const addDays = (s, n) => { const t = new Date(toUTC(s) + n * 864e5); return iso(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()); };
 const diffDays = (a, b) => Math.round((toUTC(b) - toUTC(a)) / 864e5);
-const addYear = s => { const p = parse(s); return iso(p.y + 1, p.m, p.d); };
+// як EDATE(;12): 29.02 → 28.02 (так само, як vtAddMonths_ на сервері)
+const addYear = s => { const p = parse(s); const dim = new Date(Date.UTC(p.y + 1, p.m + 1, 0)).getUTCDate(); return iso(p.y + 1, p.m, Math.min(p.d, dim)); };
 const human = s => { const p = parse(s); return `${p.d} ${MONTHS_GEN[p.m]}`; };
 const humanY = s => { const p = parse(s); return `${p.d} ${MONTHS_GEN[p.m]} ${p.y}`; };
 const dots = s => { const p = parse(s); return `${pad(p.d)}.${pad(p.m + 1)}.${p.y}`; };
@@ -402,7 +403,7 @@ function render() {
 
     ${S.start && ev.ok ? `
     <h2><span class="step">3</span>Коментар (необов'язково)</h2>
-    <div class="card"><textarea id="comment" rows="2" maxlength="200" placeholder="${S.type === "sick" ? "Наприклад: застуда, буду на звʼязку" : "Наприклад: поїздка, хто підмінить"}">${S.comment}</textarea></div>` : ""}
+    <div class="card"><textarea id="comment" rows="2" maxlength="200" placeholder="${S.type === "sick" ? "Наприклад: застуда, буду на звʼязку" : "Наприклад: поїздка, хто підмінить"}"></textarea></div>` : ""}
 
     <div class="card">
       <details>
@@ -437,7 +438,7 @@ function render() {
   $app.querySelector("#prev").onclick = () => { shiftMonth(-1); };
   $app.querySelector("#next").onclick = () => { shiftMonth(1); };
   const c = document.getElementById("comment");
-  if (c) c.oninput = () => { S.comment = c.value; };
+  if (c) { c.value = S.comment; c.oninput = () => { S.comment = c.value; }; }
 
   updateButton(ev);
 }
@@ -515,6 +516,7 @@ function hasWeekend(a, b) {
 
 function onDay(day) {
   if (day < D.today) return toast("Цей день уже минув. Запит можна подати лише на сьогодні або майбутні дні.");
+  if (day > lastAllowed) return toast(`Так далеко наперед запит подати не можна — не пізніше ${dots(lastAllowed)}.`);
   const b = busyOn(day);
   if (b && (!S.start || S.end)) return toast(`Цей день уже зайнятий — ${busyLabel(b)}.`);
   if (!S.start || S.end) { S.start = day; S.end = null; }
