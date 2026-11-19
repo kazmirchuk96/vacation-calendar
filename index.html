@@ -198,6 +198,10 @@ async function boot() {
   try {
     const res = await api("GET", { action: "state", initData: tg.initData, edit: EDIT_ID || "" });
     if (!res.ok) return renderFatal(res.title, res.how);
+    if (res.data.approverMissing) {           // інакше кнопка обіцяла б «Зафіксувати», а сервер відмовив би
+      return renderFatal("Поки що подати запит тут не вийде.",
+        `Для вас ще не вказано, хто погоджує запити. Про це вже надіслано сповіщення, налаштують найближчим часом. Якщо відсутність термінова, зверніться до <b>${res.data.adminGen || "адміністратора"}</b>.`);
+    }
     init(res.data);
   } catch (e) {
     renderFatal("Не вдалося завантажити дані.", "Перевірте інтернет і натисніть «Спробувати ще раз».", true);
