@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Новий запит</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --bg2: var(--tg-theme-secondary-bg-color, #f2f3f5);
+    --text: var(--tg-theme-text-color, #1c1c1e);
+    --hint: var(--tg-theme-hint-color, #8a8a8e);
+    --accent: var(--tg-theme-button-color, #2f7cf6);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+    --ok: #1f9d55;
+    --warn: #c47f00;
+    --err: #d93a3a;
+    --err-soft: color-mix(in srgb, #d93a3a 12%, transparent);
+    --warn-soft: color-mix(in srgb, #c47f00 13%, transparent);
+    --busy: #8e6cf0;
+    --busy-soft: color-mix(in srgb, #8e6cf0 18%, transparent);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not(.tg) {
+      --bg: #17181c; --bg2: #0e0f12; --text: #f2f2f5; --hint: #8d8f98;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg2); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 12px 12px 120px; }
+  .card { background: var(--bg); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+       color: var(--hint); margin: 4px 4px 8px; }
+  .step { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--accent);
+          color: var(--accent-text); font-size: 12px; align-items: center; justify-content: center; margin-right: 6px; }
+
+  /* Тип */
+  .types { display: grid; gap: 8px; }
+  .type { display: flex; gap: 12px; align-items: center; padding: 12px; border-radius: 12px;
+          border: 2px solid transparent; background: var(--bg2); cursor: pointer; text-align: left;
+          color: inherit; font: inherit; width: 100%; }
+  .type.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .type .ico { font-size: 26px; }
+  .type .t { font-weight: 600; }
+  .type .s { font-size: 13px; color: var(--hint); }
+  .type .s b { color: var(--text); }
+
+  /* Календар */
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .cal-head .m { font-weight: 600; font-size: 17px; }
+  .nav { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--bg2); color: var(--text);
+         font-size: 20px; cursor: pointer; }
+  .nav:disabled { opacity: .3; }
+  .instr { font-size: 14px; color: var(--hint); margin: 0 2px 10px; min-height: 20px; }
+  .instr b { color: var(--text); }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 4px; }
+  .dow { text-align: center; font-size: 12px; color: var(--hint); padding-bottom: 4px; }
+  .dow.we { color: var(--err); opacity: .7; }
+  .d { position: relative; height: 44px; display: flex; align-items: center; justify-content: center;
+       font-size: 16px; cursor: pointer; user-select: none; }
+  .d span { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; position: relative; z-index: 1; }
+  .d.past { color: var(--hint); opacity: .35; }
+  .d.today span { box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .d.busy span { background: var(--busy-soft); color: var(--busy); font-weight: 600; }
+  .d.busy.pending span { background: repeating-linear-gradient(45deg, var(--busy-soft) 0 4px, transparent 4px 8px); }
+  .d.inrange::before { content: ""; position: absolute; inset: 2px 0; background: var(--accent-soft); }
+  .d.rs::before { left: 50%; } .d.re::before { right: 50%; }
+  .d.rs.re::before { display: none; }
+  .d.rs span, .d.re span { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .d.out { opacity: .25; pointer-events: none; }
+  .d.bridge span { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+  .retry { margin-top: 12px; border: 0; border-radius: 12px; padding: 12px 20px; font: 600 15px/1.2 inherit; font-family: inherit;
+           background: var(--accent); color: var(--accent-text); cursor: pointer; }
+  .d.bad span { background: var(--err-soft) !important; color: var(--err) !important; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--hint); margin-top: 10px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -2px; margin-right: 4px; }
+
+  /* Підсумок */
+  .sum-row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; }
+  .sum-row + .sum-row { border-top: 1px solid var(--bg2); }
+  .sum-row .k { color: var(--hint); }
+  .sum-row .v { font-weight: 600; text-align: right; }
+  .note { font-size: 13px; color: var(--hint); margin-top: 8px; }
+  .msg { border-radius: 12px; padding: 12px; font-size: 15px; margin-top: 10px; }
+  .msg.err { background: var(--err-soft); color: var(--err); }
+  .msg.warn { background: var(--warn-soft); color: var(--warn); }
+  .msg.info { background: var(--accent-soft); }
+  .msg b { font-weight: 700; }
+  .msg .how { display: block; margin-top: 4px; color: var(--text); font-size: 14px; }
+  .shake { animation: shake .35s; }
+  @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+  .yr { margin-top: 10px; font-size: 14px; }
+  .yr summary { list-style: none; cursor: pointer; color: var(--text); }
+  .yr summary::-webkit-details-marker { display: none; }
+  .yr .q { color: var(--accent); margin-left: 4px; white-space: nowrap; }
+  .yr[open] .q { display: none; }
+  .yr p { margin: 8px 0 0; color: var(--hint); }
+  .yr p b { color: var(--text); }
+  textarea { width: 100%; border: 0; border-radius: 10px; background: var(--bg2); color: var(--text);
+             font: inherit; padding: 10px; resize: none; min-height: 44px; }
+  details { font-size: 14px; }
+  details summary { cursor: pointer; font-weight: 600; padding: 2px 0; }
+  details ul { margin: 8px 0 0; padding-left: 18px; color: var(--hint); }
+  details li { margin-bottom: 4px; }
+  details li b { color: var(--text); }
+
+  /* Кнопка (поза Telegram — своя) */
+  .bar { position: fixed; z-index: 5; left: 0; right: 0; bottom: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+         background: var(--bg); box-shadow: 0 -1px 0 var(--bg2); }
+  .bar button { display: block; width: 100%; max-width: 456px; margin: 0 auto; border: 0; border-radius: 12px;
+                padding: 14px; font: 600 16px/1.2 inherit; font-family: inherit; cursor: pointer;
+                background: var(--accent); color: var(--accent-text); }
+  .bar button.idle { background: var(--bg2); color: var(--hint); }
+  .tg .bar { display: none; }
+
+  .toast { position: fixed; left: 12px; right: 12px; bottom: 90px; max-width: 456px; margin: 0 auto;
+           background: #1c1c1e; color: #fff; padding: 12px 14px; border-radius: 12px; font-size: 14px;
+           opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: 1; transform: none; }
+
+  .done { text-align: center; padding: 40px 16px; }
+  .done .big { font-size: 56px; }
+  .demo { font-size: 12px; color: var(--hint); text-align: center; margin-top: 6px; }
+  .demo select { font: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="bar" id="bar"><button id="btn"></button></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ------------------------------------------------------------------
+ * Вхідні дані бот передає в параметрі ?d=<base64url(JSON)>.
+ * Без параметра показуються демо-дані (для перегляду поза Telegram).
+ * ------------------------------------------------------------------ */
+const DEMO = {
+  default: {
+    name: "Олена Демо", approver: "Тімлід Демо", admin: "Адмін Демо", adminGen: "Адміна Демо", today: "2026-11-19",
+    year: { start: "2026-01-01", end: "2027-01-01" },
+    balance: { vacation: { current: 2, next: 30 }, sick: { current: 5, next: 7 } },
+    busy: [
+      { from: "2026-11-16", to: "2026-11-16", type: "vacation", status: "approved" },
+      { from: "2026-12-03", to: "2026-12-05", type: "vacation", status: "pending" },
+    ],
+  },
+  noApprover: {
+    name: "Керівник Демо", approver: null, today: "2026-11-19",
+    year: { start: "2026-01-01", end: "2027-01-01" },
+    balance: { vacation: { current: -5, next: 30 }, sick: { current: 5, next: 7 } },
+    busy: [{ from: "2026-11-18", to: "2026-11-27", type: "vacation", status: "approved" }],
+  },
+  newbie: {
+    name: "Новачок Демо", approver: "Тімлід Демо", today: "2026-11-19",
+    year: { start: "2026-10-20", end: "2027-10-20", hired: "2025-10-20" },
+    balance: { vacation: { current: 25, next: 30 }, sick: { current: 7, next: 7 } },
+    busy: [{ from: "2026-11-09", to: "2026-11-13", type: "vacation", status: "approved" }],
+  },
+};
+
+const TYPES = {
+  vacation: { ico: "🌴", title: "Відпустка/вихідний", gen: "відпустки" },
+  sick: { ico: "🤒", title: "Лікарняний", gen: "лікарняних" },
+};
+const MONTHS = ["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
+const MONTHS_GEN = ["січня","лютого","березня","квітня","травня","червня","липня","серпня","вересня","жовтня","листопада","грудня"];
+
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);
+if (inTg) { document.documentElement.classList.add("tg"); tg.ready(); tg.expand(); }
+
+/* ---------- зв'язок з ботом (Apps Script) ---------- */
+const QS = new URLSearchParams(location.search);
+const API = QS.get("api");                 // адреса вебзастосунку Apps Script
+const EDIT_ID = QS.get("edit");            // номер запиту, який змінюємо
+let D = null, IS_DEMO = false;
+
+async function api(method, payload) {
+  const opts = method === "GET" ? {} : { method: "POST", body: JSON.stringify(payload) }; // text/plain → без preflight
+  const url = method === "GET" ? API + "?" + new URLSearchParams(payload).toString() : API;
+  const r = await fetch(url, opts);
+  return r.json();
+}
+
+async function boot() {
+  if (!inTg || !API) {                      // поза Telegram — демо
+    IS_DEMO = true; init(DEMO[QS.get("demo")] || DEMO.default); return;
+  }
+  renderLoading();
+  try {
+    const res = await api("GET", { action: "state", initData: tg.initData, edit: EDIT_ID || "" });
+    if (!res.ok) return renderFatal(res.title, res.how);
+    init(res.data);
+  } catch (e) {
+    renderFatal("Не вдалося завантажити дані.", "Перевірте інтернет і натисніть «Спробувати ще раз».", true);
+  }
+}
+
+/* ---------- дати як рядки YYYY-MM-DD, без часових поясів ---------- */
+const pad = n => String(n).padStart(2, "0");
+const iso = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+const parse = s => { const [y, m, d] = s.split("-").map(Number); return { y, m: m - 1, d }; };
+const toUTC = s => { const p = parse(s); return Date.UTC(p.y, p.m, p.d); };
+const addDays = (s, n) => { const t = new Date(toUTC(s) + n * 864e5); return iso(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()); };
+const diffDays = (a, b) => Math.round((toUTC(b) - toUTC(a)) / 864e5);
+const addYear = s => { const p = parse(s); return iso(p.y + 1, p.m, p.d); };
+const human = s => { const p = parse(s); return `${p.d} ${MONTHS_GEN[p.m]}`; };
+const humanY = s => { const p = parse(s); return `${p.d} ${MONTHS_GEN[p.m]} ${p.y}`; };
+const dots = s => { const p = parse(s); return `${pad(p.d)}.${pad(p.m + 1)}.${p.y}`; };
+function plural(n, one, few, many) {
+  const a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+}
+const daysW = n => `${n} ${plural(n, "день", "дні", "днів")}`;
+const fmtRange = (a, b) => a === b ? human(a) : (parse(a).m === parse(b).m && parse(a).y === parse(b).y
+  ? `${parse(a).d}–${human(b)}` : `${human(a)} – ${human(b)}`);
+
+/* ---------- робочий рік простими словами ---------- */
+const yearLast = () => addDays(D.year.end, -1);
+function yearWhat() {
+  // D.year.hired відсутній → робочий рік календарний
+  return D.year.hired
+    ? `Це 12 місяців, рахуючи від дня, коли ви почали працювати в компанії (${humanY(D.year.hired)}). Щороку ${human(D.year.hired)} він починається заново.`
+    : `Для вас він збігається зі звичайним календарним роком: з 1 січня по 31 грудня.`;
+}
+const isCalendarYear = () => !D.year.hired;   // "-" у таблиці → робочий рік = календарний
+function yearCard() {
+  if (isCalendarYear()) return "";             // для календарного року пояснення не потрібне
+  const vac = D.limits ? D.limits.vacation : 30, sick = D.limits ? D.limits.sick : 7;
+  return `<details class="yr">
+    <summary>📅 Ваш робочий рік: <b>${dots(D.year.start)} – ${dots(yearLast())}</b> <span class="q">Що це?</span></summary>
+    <p><b>Робочий рік</b> — це період, за який вам дається ${vac} днів відпустки/вихідних і ${sick} днів лікарняних. ${yearWhat()}</p>
+    <p>Дні, які ви не використаєте до <b>${humanY(yearLast())}</b>, згорять. ${humanY(D.year.end)} почнеться новий робочий рік, і дні нарахуються знову в повному обсязі.</p>
+  </details>`;
+}
+
+/* ---------- стан ---------- */
+let lastAllowed;                                   // далі цієї дати запити не приймаються
+const S = { type: "vacation", start: null, end: null, comment: "", view: null, sent: false, sending: false, serverErr: null };
+
+function init(data) {
+  D = data;
+  lastAllowed = addDays(addYear(D.year.end), -1);
+  const t = parse(D.today); S.view = { y: t.y, m: t.m };
+  if (D.edit) {                                     // зміна запиту: стартуємо з його дат
+    S.type = D.edit.type; S.start = D.edit.from; S.end = D.edit.to;
+    const f = parse(D.edit.from >= D.today ? D.edit.from : D.today); S.view = { y: f.y, m: f.m };
+  }
+  render();
+}
+
+function renderLoading() {
+  $app.innerHTML = `<div class="card done"><div class="big">⏳</div><p style="color:var(--hint)">Завантажую ваші дані…</p></div>`;
+  hideButton();
+}
+function renderFatal(title, how, retry) {
+  $app.innerHTML = `<div class="card done"><div class="big">😕</div><h3>${title}</h3><p style="color:var(--hint)">${how || ""}</p>
+    ${retry ? `<button class="retry" onclick="boot()">Спробувати ще раз</button>` : ""}</div>`;
+  hideButton();
+}
+function hideButton() {
+  if (inTg) tg.MainButton.hide(); else document.getElementById("bar").style.display = "none";
+}
+
+function busyOn(day) {
+  return D.busy.find(b => day >= b.from && day <= b.to);
+}
+function busyLabel(b) {
+  const what = b.type === "sick" ? "лікарняний" : "відпустка/вихідний";
+  const st = b.status === "pending" ? "чекає на погодження" : "вже погоджено";
+  return `${fmtRange(b.from, b.to)}: ${what} (${st})`;
+}
+
+/* ---------- вихідні між відпустками (як vtBridge_ у боті) ---------- */
+const isWeekend = d => { const w = new Date(toUTC(d)).getUTCDay(); return w === 0 || w === 6; };
+function bridge(type, from, to) {
+  const added = [];
+  if (type !== "vacation") return { from, to, added };
+  const vac = D.busy.filter(b => b.type === "vacation");
+  const endsAt = d => vac.some(b => b.to === d), startsAt = d => vac.some(b => b.from === d);
+  let d = addDays(from, -1); const back = [];
+  while (!endsAt(d) && isWeekend(d)) { back.push(d); d = addDays(d, -1); }
+  if (back.length && endsAt(d)) { from = back[back.length - 1]; added.push(...back.slice().reverse()); }
+  d = addDays(to, 1); const fwd = [];
+  while (!startsAt(d) && isWeekend(d)) { fwd.push(d); d = addDays(d, 1); }
+  if (fwd.length && startsAt(d)) { to = fwd[fwd.length - 1]; added.push(...fwd); }
+  return { from, to, added };
+}
+
+/* ---------- перевірка вибору: повертає {ok, level, title, how} ---------- */
+function evaluate() {
+  const bal = D.balance[S.type];
+  const t = TYPES[S.type];
+  if (!S.start) return { ok: false, step: "start" };
+  const asked = { from: S.start, to: S.end || S.start };
+
+  // перетин з наявними записами
+  const clash = D.busy.filter(b => !(b.to < asked.from || b.from > asked.to));
+  if (clash.length) {
+    return { ok: false, level: "err", total: diffDays(asked.from, asked.to) + 1, from: asked.from, to: asked.to, added: [],
+      title: `У вибраний період уже є запис: ${clash.map(busyLabel).join("; ")}.`,
+      how: "Оберіть дати, які не перетинаються з ним. Якщо той запис помилковий, скасуйте його в боті: «📋 Мої запити»." };
+  }
+  if (D.edit && D.edit.type === S.type && D.edit.from === asked.from && D.edit.to === asked.to) {
+    return { ok: false, level: "warn", total: diffDays(asked.from, asked.to) + 1, from: asked.from, to: asked.to, added: [],
+      title: "Зараз обрано ті самі дати, що й у запиті.", how: "Натисніть на новий перший день, щоб обрати інші дати." };
+  }
+
+  const br = bridge(S.type, asked.from, asked.to);
+  const from = br.from, end = br.to;
+  const total = diffDays(from, end) + 1;
+  const base = { total, from, to: end, added: br.added };
+
+  // розподіл між поточним і наступним робочим роком
+  const inCur = end < D.year.end ? total : Math.max(0, diffDays(from, D.year.end));
+  const inNext = total - inCur;
+  const leftCur = bal.current - inCur;
+  const leftNext = bal.next - inNext;
+
+  if (inCur > 0 && leftCur < 0) {
+    const avail = Math.max(0, bal.current);
+    return { ...base, ok: false, level: "err", inCur, inNext,
+      title: avail === 0
+        ? `У вас не залишилось днів ${t.gen} до ${humanY(addDays(D.year.end, -1))}.`
+        : `Не вистачає днів ${t.gen}: доступно ${daysW(avail)}, а обрано ${daysW(inCur)}.`,
+      how: avail === 0
+        ? `Нові ${t.gen === "відпустки" ? "дні відпустки" : "дні лікарняних"} нарахуються ${humanY(D.year.end)}. Можна обрати дати, починаючи з цього дня.`
+        : `Скоротіть період на ${daysW(inCur - avail)}.` };
+  }
+  if (inNext > 0 && leftNext < 0) {
+    return { ...base, ok: false, level: "err", inCur, inNext,
+      title: `Не вистачає днів ${t.gen} у наступному році: доступно ${daysW(Math.max(0, bal.next))}, обрано ${daysW(inNext)}.`,
+      how: `Скоротіть період на ${daysW(inNext - Math.max(0, bal.next))}.` };
+  }
+  return { ...base, ok: true, inCur, inNext, leftCur, leftNext };
+}
+
+/* ---------- рендер ---------- */
+const $app = document.getElementById("app");
+const $btn = document.getElementById("btn");
+const $toast = document.getElementById("toast");
+let toastTimer;
+function toast(text) {
+  $toast.textContent = text; $toast.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => $toast.classList.remove("show"), 3500);
+  if (inTg) tg.HapticFeedback.notificationOccurred("warning");
+}
+
+function render() {
+  if (S.sent) return renderDone();
+  const ev = evaluate();
+  const bal = D.balance;
+  const yearEndHuman = humanY(addDays(D.year.end, -1));
+
+  const typeBtn = k => {
+    const b = bal[k].current;
+    const left = b > 0 ? `Залишилось <b>${daysW(b)}</b> · згорять ${yearEndHuman}` : `<b>Днів не залишилось</b> · нові будуть ${humanY(D.year.end)}`;
+    return `<button class="type ${S.type === k ? "sel" : ""}" data-type="${k}">
+      <span class="ico">${TYPES[k].ico}</span>
+      <span><div class="t">${TYPES[k].title}</div><div class="s">${left}</div></span></button>`;
+  };
+
+  // інструкція над календарем
+  let instr;
+  if (!S.start) instr = "Натисніть на <b>перший день</b>, коли вас не буде.";
+  else if (!S.end) instr = `Обрано <b>${human(S.start)}</b>. Якщо вас не буде кілька днів — натисніть на <b>останній день</b>. Якщо лише один день — нічого більше не треба.`;
+  else instr = `Обрано <b>${fmtRange(S.start, S.end)}</b>. Щоб обрати інші дати, просто натисніть на новий перший день.`;
+
+  $app.innerHTML = `
+    ${D.edit ? `<div class="msg info" style="margin:0 0 10px"><b>Зміна запиту №${EDIT_ID}</b><span class="how">Зараз: ${fmtRange(D.edit.from, D.edit.to)}${D.edit.status === "approved" ? " (уже погоджено)" : ""}. Оберіть нові дати й натисніть «Надіслати».${D.edit.status === "approved" ? " Поки тімлід не погодить нові дати, діють старі." : " Старий запит заміниться новим."}</span></div>` : ""}
+    ${S.serverErr ? `<div class="msg err" style="margin:0 0 10px"><b>${S.serverErr.title}</b><span class="how">${S.serverErr.how || ""}</span></div>` : ""}
+    <h2><span class="step">1</span>Що оформлюємо</h2>
+    <div class="card"><div class="types">${typeBtn("vacation")}${typeBtn("sick")}</div>${yearCard()}</div>
+
+    <h2><span class="step">2</span>Оберіть дати</h2>
+    <div class="card">
+      <div class="instr">${instr}</div>
+      ${renderCalendar(ev)}
+      <div class="legend">
+        <span><i style="box-shadow: inset 0 0 0 1.5px var(--accent)"></i>сьогодні</span>
+        <span><i style="background: var(--busy-soft)"></i>вже погоджено</span>
+        <span><i style="background: repeating-linear-gradient(45deg, var(--busy-soft) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 1px var(--busy-soft)"></i>чекає погодження</span>
+      </div>
+    </div>
+
+    ${S.start ? renderSummary(ev) : ""}
+
+    ${S.start && ev.ok ? `
+    <h2><span class="step">3</span>Коментар (необов'язково)</h2>
+    <div class="card"><textarea id="comment" rows="2" maxlength="200" placeholder="${S.type === "sick" ? "Наприклад: застуда, буду на звʼязку" : "Наприклад: поїздка, хто підмінить"}">${S.comment}</textarea></div>` : ""}
+
+    <div class="card">
+      <details>
+        <summary>Як рахуються дні?</summary>
+        <ul>
+          <li>На робочий рік у вас <b>${D.limits ? D.limits.vacation : 30} днів відпустки</b> і <b>${D.limits ? D.limits.sick : 7} днів лікарняних</b>${D.hours && D.hours < 8 ? " (у вас неповний день, тому вдвічі менше)" : ""}.</li>
+          <li><b>Вихідні (day-off) входять у ці ${D.limits ? D.limits.vacation : 30} днів відпустки.</b> Кожен взятий вихідний зменшує залишок відпустки на 1 день.</li>
+          <li>Рахуються <b>календарні дні</b> — разом із суботами, неділями і святами. Тиждень відпустки з понеділка по неділю = 7 днів.</li>
+          <li>Якщо між двома вашими відпустками/вихідними лише субота й неділя, ці дні теж рахуються як відпустка.</li>
+          <li>${isCalendarYear()
+            ? `Дні нараховуються на робочий рік. Для вас він збігається з календарним: з 1 січня по 31 грудня. Невикористані дні згорають <b>${humanY(yearLast())}</b>, а ${humanY(D.year.end)} нараховуються нові.`
+            : `<b>Робочий рік</b> — період, за який нараховуються дні. Ваш: <b>${dots(D.year.start)} – ${dots(yearLast())}</b>. ${yearWhat()} Невикористані дні згорають в останній день робочого року, а наступного дня нараховуються нові.`}</li>
+          <li>${D.approver
+            ? `Ваш запит погоджує <b>${D.approver}</b> — і відпустку, і лікарняний. Відповідь прийде повідомленням у чат з ботом; якщо запит відхилять, там буде вказана причина.${D.adminGen && D.admin !== D.approver ? ` Якщо погоджувач відсутній, зверніться до <b>${D.adminGen}</b>.` : ""}`
+            : "Вам погодження не потрібне — запис фіксується одразу."}</li>
+        </ul>
+      </details>
+    </div>
+    ${IS_DEMO && !inTg ? `<div class="demo">Демо-режим ·
+      <select id="demo"><option value="default">Співробітник з тімлідом, мало днів</option>
+      <option value="noApprover">Без погоджувача, у мінусі</option>
+      <option value="newbie">Робочий рік з жовтня</option></select></div>` : ""}
+  `;
+  if (IS_DEMO && !inTg) {
+    const sel = document.getElementById("demo");
+    sel.value = new URLSearchParams(location.search).get("demo") || "default";
+    sel.onchange = () => { location.search = "?demo=" + sel.value; };
+  }
+
+  $app.querySelectorAll("[data-type]").forEach(el => el.onclick = () => { S.type = el.dataset.type; render(); });
+  $app.querySelectorAll("[data-day]").forEach(el => el.onclick = () => onDay(el.dataset.day));
+  $app.querySelector("#prev").onclick = () => { shiftMonth(-1); };
+  $app.querySelector("#next").onclick = () => { shiftMonth(1); };
+  const c = document.getElementById("comment");
+  if (c) c.oninput = () => { S.comment = c.value; };
+
+  updateButton(ev);
+}
+
+function renderCalendar(ev) {
+  const { y, m } = S.view;
+  const first = new Date(Date.UTC(y, m, 1));
+  const lead = (first.getUTCDay() + 6) % 7;                // понеділок — перший
+  const days = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const rs = ev && ev.from ? ev.from : S.start;     // з урахуванням доданих вихідних
+  const end = ev && ev.to ? ev.to : (S.end || S.start);
+  const minView = parse(D.today), maxView = parse(lastAllowed);
+  const canPrev = y * 12 + m > minView.y * 12 + minView.m;
+  const canNext = y * 12 + m < maxView.y * 12 + maxView.m;
+
+  let cells = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"].map((d, i) => `<div class="dow ${i > 4 ? "we" : ""}">${d}</div>`).join("");
+  for (let i = 0; i < lead; i++) cells += `<div></div>`;
+  for (let d = 1; d <= days; d++) {
+    const day = iso(y, m, d);
+    const cls = ["d"];
+    if (day < D.today) cls.push("past");
+    if (day > lastAllowed) cls.push("out");
+    if (day === D.today) cls.push("today");
+    const b = busyOn(day);
+    if (b) cls.push("busy", b.status);
+    if (S.start && day >= rs && day <= end) {
+      cls.push("inrange");
+      if (ev && ev.added && ev.added.includes(day)) cls.push("bridge");
+      if (day === rs) cls.push("rs");
+      if (day === end) cls.push("re");
+      if (b) cls.push("bad");
+    }
+    cells += `<div class="${cls.join(" ")}" data-day="${day}"><span>${d}</span></div>`;
+  }
+  return `<div class="cal-head">
+      <button class="nav" id="prev" ${canPrev ? "" : "disabled"} aria-label="Попередній місяць">‹</button>
+      <div class="m">${MONTHS[m]} ${y}</div>
+      <button class="nav" id="next" ${canNext ? "" : "disabled"} aria-label="Наступний місяць">›</button>
+    </div><div class="grid">${cells}</div>`;
+}
+
+function renderSummary(ev) {
+  const t = TYPES[S.type];
+  const from = ev.from || S.start, end = ev.to || S.end || S.start;
+  if (!ev.total) return "";
+  let rows = `
+    <div class="sum-row"><span class="k">Тип</span><span class="v">${t.ico} ${t.title}</span></div>
+    <div class="sum-row"><span class="k">Дати</span><span class="v">${from === end ? humanY(from) : `${dots(from)} – ${dots(end)}`}</span></div>
+    <div class="sum-row"><span class="k">Кількість</span><span class="v">${daysW(ev.total)}</span></div>`;
+  if (ev.ok) {
+    if (ev.inNext && ev.inCur) {
+      rows += `<div class="sum-row"><span class="k">Спишеться</span><span class="v">${isCalendarYear()
+        ? `${daysW(ev.inCur)} — з днів ${parse(D.year.start).y} року,<br>${daysW(ev.inNext)} — з днів ${parse(D.year.end).y} року`
+        : `${daysW(ev.inCur)} — з днів до ${dots(yearLast())},<br>${daysW(ev.inNext)} — з нових днів (від ${dots(D.year.end)})`}</span></div>`;
+    }
+    rows += `<div class="sum-row"><span class="k">Залишиться ${t.gen}</span><span class="v">${
+      ev.inCur ? daysW(ev.leftCur) + (ev.inNext ? (isCalendarYear() ? ` у ${parse(D.year.start).y}` : ` до ${dots(yearLast())}`) : "") : ""}${
+      ev.inCur && ev.inNext ? "<br>" : ""}${ev.inNext ? daysW(ev.leftNext) + (isCalendarYear() ? ` у ${parse(D.year.end).y}` : ` у новому році (від ${dots(D.year.end)})`) : ""}</span></div>`;
+    rows += `<div class="sum-row"><span class="k">Хто погоджує</span><span class="v">${D.approver || "не потрібно, фіксується одразу"}</span></div>`;
+  }
+  const bridgeNote = ev.added && ev.added.length ? `<div class="msg warn"><b>Додано ${daysW(ev.added.length)}: ${fmtRange(ev.added[0], ev.added[ev.added.length - 1])}</b><span class="how">Між цією і вашою іншою відпусткою/вихідним лише вихідні дні (субота, неділя). За правилами такі вихідні теж рахуються як відпустка.</span></div>` : "";
+  const weekendNote = !bridgeNote && ev.total > 1 && hasWeekend(from, end) ? `<div class="note">Субота й неділя в цьому періоді теж рахуються — дні календарні.</div>` : "";
+  const splitNote = ev.ok && ev.inNext && ev.inCur && !isCalendarYear() ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Ваш робочий рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими ${D.limits ? D.limits[S.type] : (S.type === "sick" ? 7 : 30)} днями ${TYPES[S.type].gen}. Тому дні до ${dots(yearLast())} спишуться зі старого залишку, а решта — з нового.</span></div>` : "";
+  const err = !ev.ok ? `<div class="msg ${ev.level}" id="err"><b>${ev.title}</b><span class="how">${ev.how}</span></div>` : "";
+  return `<h2>Перевірте</h2><div class="card">${rows}${bridgeNote}${weekendNote}${splitNote}${err}</div>`;
+}
+
+function hasWeekend(a, b) {
+  for (let d = a; d <= b; d = addDays(d, 1)) {
+    const w = new Date(toUTC(d)).getUTCDay();
+    if (w === 0 || w === 6) return true;
+  }
+  return false;
+}
+
+function onDay(day) {
+  if (day < D.today) return toast("Цей день уже минув. Запит можна подати лише на сьогодні або майбутні дні.");
+  const b = busyOn(day);
+  if (b && (!S.start || S.end)) return toast(`Цей день уже зайнятий — ${busyLabel(b)}.`);
+  if (!S.start || S.end) { S.start = day; S.end = null; }
+  else if (day === S.start) { S.end = day; }
+  else if (day < S.start) { S.start = day; S.end = null; }
+  else { S.end = day; }
+  if (inTg) tg.HapticFeedback.selectionChanged();
+  render();
+}
+
+function shiftMonth(n) {
+  let { y, m } = S.view; m += n;
+  if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
+  S.view = { y, m }; render();
+}
+
+/* ---------- головна кнопка: її текст завжди пояснює, що робити ---------- */
+let btnState = { label: "", ready: false };
+function updateButton(ev) {
+  let label, ready = false;
+  if (!S.start) label = "Спочатку оберіть дати в календарі";
+  else if (!ev.ok) label = "Виправте дати — причина вище";
+  else { ready = true; label = D.approver ? `Надіслати запит (${daysW(ev.total)})` : `Зафіксувати (${daysW(ev.total)})`; }
+  btnState = { label, ready };
+  if (!inTg) document.getElementById("bar").style.display = "";
+  if (inTg) {
+    tg.MainButton.setParams({ text: label, is_visible: true, is_active: true,
+      color: ready ? tg.themeParams.button_color : tg.themeParams.secondary_bg_color || "#c8c8cc",
+      text_color: ready ? tg.themeParams.button_text_color : tg.themeParams.hint_color || "#777" });
+  } else {
+    $btn.textContent = label;
+    $btn.className = ready ? "" : "idle";
+  }
+}
+
+function onMain() {
+  if (!btnState.ready) {
+    // кнопка ніколи не «мовчить»: показуємо, що саме не так
+    if (!S.start) { toast("Натисніть на перший день відсутності в календарі."); return; }
+    const e = document.getElementById("err");
+    if (e) { e.scrollIntoView({ behavior: "smooth", block: "center" }); e.classList.remove("shake"); void e.offsetWidth; e.classList.add("shake"); }
+    return;
+  }
+  if (S.sending) return;
+  const ev = evaluate();
+  const body = { action: "submit", initData: inTg ? tg.initData : "", type: S.type, from: S.start, to: S.end || S.start,
+                 comment: S.comment.trim(), editId: EDIT_ID || "" };
+  if (IS_DEMO) { S.result = { ok: true, mode: D.approver ? "sent" : "auto", approver: D.approver }; S.final = ev; S.sent = true; render(); return; }
+  S.sending = true; S.serverErr = null; setSending(true);
+  api("POST", body).then(res => {
+    S.sending = false; setSending(false);
+    if (!res.ok) {
+      if (res.auth === false) return renderFatal(res.title, res.how);
+      S.serverErr = { title: res.title, how: res.how }; render(); window.scrollTo({ top: 0, behavior: "smooth" });
+      if (inTg) tg.HapticFeedback.notificationOccurred("error");
+      return;
+    }
+    S.result = res; S.final = ev; S.sent = true; render();
+    if (inTg) tg.HapticFeedback.notificationOccurred("success");
+  }).catch(() => {
+    S.sending = false; setSending(false);
+    S.serverErr = { title: "Не вдалося надіслати — немає зв'язку.", how: "Перевірте інтернет і натисніть кнопку ще раз. Запит поки не надіслано." };
+    render(); window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+}
+function setSending(on) {
+  const label = on ? "Надсилаю…" : btnState.label;
+  if (inTg) { on ? tg.MainButton.showProgress() : tg.MainButton.hideProgress(); tg.MainButton.setText(label); }
+  else $btn.textContent = label;
+}
+if (inTg) tg.MainButton.onClick(onMain); else $btn.onclick = onMain;
+
+function renderDone() {
+  const ev = S.final || {};
+  const from = ev.from || S.start, end = ev.to || S.end || S.start;
+  const auto = S.result && S.result.mode === "auto";
+  const who = (S.result && S.result.approver) || D.approver;
+  $app.innerHTML = `<div class="card done"><div class="big">✅</div>
+    <h3>${auto ? "Записано" : "Запит надіслано"}</h3>
+    <p>${TYPES[S.type].title}: ${from === end ? humanY(from) : `${dots(from)} – ${dots(end)}`} (${daysW(ev.total || 1)}).</p>
+    <p style="color:var(--hint)">${auto ? "Підтвердження вже в чаті з ботом." : `Запит отримав(ла) ${who}. Щойно його погодять або відхилять, вам прийде повідомлення в чаті з ботом. Якщо відхилять — там буде вказана причина.`}</p>
+    ${inTg ? `<button class="retry" onclick="Telegram.WebApp.close()">Закрити</button>` : ""}</div>`;
+  hideButton();
+}
+boot();
+</script>
+</body>
+</html>
