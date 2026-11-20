@@ -521,9 +521,11 @@ function renderSummary(ev) {
   }
   const bridgeNote = ev.added && ev.added.length ? `<div class="msg warn"><b>Додано ${daysW(ev.added.length)}: ${fmtRange(ev.added[0], ev.added[ev.added.length - 1])}</b><span class="how">Між цією і вашою іншою відпусткою/вихідним лише вихідні дні (субота, неділя). За правилами такі вихідні теж рахуються як відпустка.</span></div>` : "";
   const startCal = (from < D.year.end ? unitCur() : unitNext()) === "calendar";
+  const mixed = ev.inCur && ev.inNext && unitCur() !== unitNext();
   const weekendNote = !bridgeNote && ev.ok && hasWeekend(from, end)
-    ? (startCal ? `<div class="note">Субота й неділя в цьому періоді теж рахуються — дні календарні.</div>`
-                : `<div class="note">Субота й неділя не рахуються — списуються лише робочі дні (пн–пт).</div>`) : "";
+    ? (mixed ? `<div class="note">До ${dots(yearLast())} субота й неділя рахуються (старі правила, дні календарні), а з ${dots(D.year.end)} списуються лише робочі дні (пн–пт).</div>`
+      : startCal ? `<div class="note">Субота й неділя в цьому періоді теж рахуються — дні календарні.</div>`
+                 : `<div class="note">Субота й неділя не рахуються — списуються лише робочі дні (пн–пт).</div>`) : "";
   const splitNote = ev.ok && ev.inNext && ev.inCur && !isCalendarYear() ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Ваш робочий рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими днями ${TYPES[S.type].gen} (${(unitNext() === "work" ? workW : daysW)(limitsNext()[S.type])}). Тому дні до ${dots(yearLast())} спишуться зі старого залишку, а решта — з нового.</span></div>` : "";
   const err = !ev.ok ? `<div class="msg ${ev.level}" id="err"><b>${ev.title}</b><span class="how">${ev.how}</span></div>` : "";
   return `<h2>Перевірте</h2><div class="card">${rows}${bridgeNote}${weekendNote}${splitNote}${err}</div>`;
