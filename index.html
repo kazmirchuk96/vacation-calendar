@@ -200,7 +200,7 @@ async function boot() {
     if (!res.ok) return renderFatal(res.title, res.how);
     if (res.data.approverMissing) {           // інакше кнопка обіцяла б «Зафіксувати», а сервер відмовив би
       return renderFatal("Поки що подати запит тут не вийде.",
-        `Для вас ще не вказано, хто погоджує запити. Про це вже надіслано сповіщення, налаштують найближчим часом. Якщо відсутність термінова, зверніться до <b>${res.data.adminGen || "адміністратора"}</b>.`, true);
+        (res.data.approverMissingText || `Для вас ще не вказано, хто погоджує запити. Якщо відсутність термінова, зверніться до <b>${res.data.adminGen || "адміністратора"}</b>.`) + " Про це вже надіслано сповіщення.", true);
     }
     init(res.data);
   } catch (e) {
@@ -289,6 +289,7 @@ function busyLabel(b) {
 
 /* ---------- одиниці: календарні (старі правила) або робочі дні (з 2027), як vtCountDays_ у боті ---------- */
 const isWeekend = d => { const w = new Date(toUTC(d)).getUTCDay(); return w === 0 || w === 6; };
+const workW = n => `${n} ${plural(n, "робочий день", "робочі дні", "робочих днів")}`;
 const unitCur = () => (D.units && D.units.cur) || "calendar";
 const unitNext = () => (D.units && D.units.next) || "calendar";
 const limitsNext = () => D.limitsNext || D.limits || { vacation: 30, sick: 7 };
@@ -425,13 +426,13 @@ function render() {
       <details>
         <summary>Як рахуються дні?</summary>
         <ul>
-          <li>На робочий рік у вас <b>${D.limits ? D.limits.vacation : 30} ${unitCur() === "work" ? "робочих " : ""}днів відпустки</b> і <b>${D.limits ? D.limits.sick : 7} ${unitCur() === "work" ? "робочих " : ""}днів лікарняних</b>${D.hours && D.hours < 8 ? " (у вас неповний день, тому вдвічі менше)" : ""}.</li>
+          <li>На робочий рік у вас <b>${(unitCur() === "work" ? workW : daysW)(D.limits ? D.limits.vacation : 30)} відпустки</b> і <b>${(unitCur() === "work" ? workW : daysW)(D.limits ? D.limits.sick : 7)} лікарняних</b>${D.hours && D.hours < 8 ? " (у вас неповний день, тому вдвічі менше)" : ""}.</li>
           <li><b>Вихідні (day-off) входять у ці ${D.limits ? D.limits.vacation : 30} днів відпустки.</b> Кожен взятий вихідний зменшує залишок відпустки на 1 день.</li>
           ${unitCur() === "work"
             ? `<li>Рахуються лише <b>робочі дні</b> (пн–пт). Субота й неділя не списуються: тиждень відпустки з понеділка по неділю = 5 днів.</li>`
             : `<li>Рахуються <b>календарні дні</b> — разом із суботами, неділями і святами. Тиждень відпустки з понеділка по неділю = 7 днів.</li>
           <li>Якщо між двома вашими відпустками/вихідними лише субота й неділя, ці дні теж рахуються як відпустка.</li>`}
-          ${unitCur() !== unitNext() ? `<li>📌 <b>З ${humanY(D.year.end)}</b> (ваш новий робочий рік) правила змінюються: <b>${limitsNext().vacation} робочих днів відпустки</b> (разом із day-off) і <b>${limitsNext().sick} робочих днів лікарняних</b>. Субота й неділя більше не списуються.</li>` : ""}
+          ${unitCur() !== unitNext() ? `<li>📌 <b>З ${humanY(D.year.end)}</b> (ваш новий робочий рік) правила змінюються: <b>${workW(limitsNext().vacation)} відпустки</b> (разом із day-off) і <b>${workW(limitsNext().sick)} лікарняних</b>. Субота й неділя більше не списуються.</li>` : ""}
           <li>${isCalendarYear()
             ? `Дні нараховуються на робочий рік. Для вас він збігається з календарним: з 1 січня по 31 грудня. Невикористані дні згорають <b>${humanY(yearLast())}</b>, а ${humanY(D.year.end)} нараховуються нові.`
             : `<b>Робочий рік</b> — період, за який нараховуються дні. Ваш: <b>${dots(D.year.start)} – ${dots(yearLast())}</b>. ${yearWhat()} Невикористані дні згорають в останній день робочого року, а наступного дня нараховуються нові.`}</li>
@@ -523,7 +524,7 @@ function renderSummary(ev) {
   const weekendNote = !bridgeNote && ev.ok && hasWeekend(from, end)
     ? (startCal ? `<div class="note">Субота й неділя в цьому періоді теж рахуються — дні календарні.</div>`
                 : `<div class="note">Субота й неділя не рахуються — списуються лише робочі дні (пн–пт).</div>`) : "";
-  const splitNote = ev.ok && ev.inNext && ev.inCur && !isCalendarYear() ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Ваш робочий рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими ${limitsNext()[S.type]} ${unitNext() === "work" ? "робочими " : ""}днями ${TYPES[S.type].gen}. Тому дні до ${dots(yearLast())} спишуться зі старого залишку, а решта — з нового.</span></div>` : "";
+  const splitNote = ev.ok && ev.inNext && ev.inCur && !isCalendarYear() ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Ваш робочий рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими днями ${TYPES[S.type].gen} (${(unitNext() === "work" ? workW : daysW)(limitsNext()[S.type])}). Тому дні до ${dots(yearLast())} спишуться зі старого залишку, а решта — з нового.</span></div>` : "";
   const err = !ev.ok ? `<div class="msg ${ev.level}" id="err"><b>${ev.title}</b><span class="how">${ev.how}</span></div>` : "";
   return `<h2>Перевірте</h2><div class="card">${rows}${bridgeNote}${weekendNote}${splitNote}${err}</div>`;
 }
