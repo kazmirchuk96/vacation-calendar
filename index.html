@@ -327,7 +327,7 @@ function evaluate() {
   if (clash.length) {
     return { ok: false, level: "err", total: diffDays(asked.from, asked.to) + 1, from: asked.from, to: asked.to, added: [],
       title: `У вибраний період уже є запис: ${clash.map(busyLabel).join("; ")}.`,
-      how: "Оберіть дати, які не перетинаються з ним. Якщо той запис помилковий, скасуйте його в боті: «📋 Мої запити»." };
+      how: "Оберіть дати, які не перетинаються з ним. Якщо той запис помилковий, скасуйте його в боті: «📋 Мої відсутності»." };
   }
   if (D.edit && D.edit.type === S.type && D.edit.from === asked.from && D.edit.to === asked.to) {
     return { ok: false, level: "warn", total: diffDays(asked.from, asked.to) + 1, from: asked.from, to: asked.to, added: [],
