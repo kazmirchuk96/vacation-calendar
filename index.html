@@ -287,8 +287,19 @@ function busyLabel(b) {
   return `${fmtRange(b.from, b.to)}: ${what} (${st})`;
 }
 
-/* ---------- вихідні між відпустками (як vtBridge_ у боті) ---------- */
+/* ---------- одиниці: календарні (старі правила) або робочі дні (з 2027), як vtCountDays_ у боті ---------- */
 const isWeekend = d => { const w = new Date(toUTC(d)).getUTCDay(); return w === 0 || w === 6; };
+const unitCur = () => (D.units && D.units.cur) || "calendar";
+const unitNext = () => (D.units && D.units.next) || "calendar";
+const limitsNext = () => D.limitsNext || D.limits || { vacation: 30, sick: 7 };
+function countDays(a, b, unit) {
+  if (b < a) return 0;
+  if (unit !== "work") return diffDays(a, b) + 1;
+  let n = 0; for (let d = a; d <= b; d = addDays(d, 1)) if (!isWeekend(d)) n++;
+  return n;
+}
+
+/* ---------- вихідні між відпустками (як vtBridge_ у боті; лише для календарних днів) ---------- */
 function bridge(type, from, to) {
   const added = [];
   if (type !== "vacation") return { from, to, added };
@@ -322,14 +333,19 @@ function evaluate() {
       title: "Зараз обрано ті самі дати, що й у запиті.", how: "Натисніть на новий перший день, щоб обрати інші дати." };
   }
 
-  const br = bridge(S.type, asked.from, asked.to);
+  const startUnit = asked.from < D.year.end ? unitCur() : unitNext();
+  const br = startUnit === "calendar" ? bridge(S.type, asked.from, asked.to) : { from: asked.from, to: asked.to, added: [] };
   const from = br.from, end = br.to;
-  const total = diffDays(from, end) + 1;
-  const base = { total, from, to: end, added: br.added };
 
-  // розподіл між поточним і наступним робочим роком
-  const inCur = end < D.year.end ? total : Math.max(0, diffDays(from, D.year.end));
-  const inNext = total - inCur;
+  // розподіл між поточним і наступним робочим роком (кожна частина — за правилами свого року)
+  const inCur = from < D.year.end ? countDays(from, end < D.year.end ? end : yearLast(), unitCur()) : 0;
+  const inNext = end >= D.year.end ? countDays(from > D.year.end ? from : D.year.end, end, unitNext()) : 0;
+  const total = inCur + inNext;
+  const base = { total, from, to: end, added: br.added };
+  if (total === 0) {
+    return { ...base, total: diffDays(from, end) + 1, ok: false, level: "warn",
+      title: "Обрано лише суботу й неділю — вони не списуються.", how: "На вихідні запит подавати не потрібно. Оберіть будні дні." };
+  }
   const leftCur = bal.current - inCur;
   const leftNext = bal.next - inNext;
 
@@ -409,10 +425,13 @@ function render() {
       <details>
         <summary>Як рахуються дні?</summary>
         <ul>
-          <li>На робочий рік у вас <b>${D.limits ? D.limits.vacation : 30} днів відпустки</b> і <b>${D.limits ? D.limits.sick : 7} днів лікарняних</b>${D.hours && D.hours < 8 ? " (у вас неповний день, тому вдвічі менше)" : ""}.</li>
+          <li>На робочий рік у вас <b>${D.limits ? D.limits.vacation : 30} ${unitCur() === "work" ? "робочих " : ""}днів відпустки</b> і <b>${D.limits ? D.limits.sick : 7} ${unitCur() === "work" ? "робочих " : ""}днів лікарняних</b>${D.hours && D.hours < 8 ? " (у вас неповний день, тому вдвічі менше)" : ""}.</li>
           <li><b>Вихідні (day-off) входять у ці ${D.limits ? D.limits.vacation : 30} днів відпустки.</b> Кожен взятий вихідний зменшує залишок відпустки на 1 день.</li>
-          <li>Рахуються <b>календарні дні</b> — разом із суботами, неділями і святами. Тиждень відпустки з понеділка по неділю = 7 днів.</li>
-          <li>Якщо між двома вашими відпустками/вихідними лише субота й неділя, ці дні теж рахуються як відпустка.</li>
+          ${unitCur() === "work"
+            ? `<li>Рахуються лише <b>робочі дні</b> (пн–пт). Субота й неділя не списуються: тиждень відпустки з понеділка по неділю = 5 днів.</li>`
+            : `<li>Рахуються <b>календарні дні</b> — разом із суботами, неділями і святами. Тиждень відпустки з понеділка по неділю = 7 днів.</li>
+          <li>Якщо між двома вашими відпустками/вихідними лише субота й неділя, ці дні теж рахуються як відпустка.</li>`}
+          ${unitCur() !== unitNext() ? `<li>📌 <b>З ${humanY(D.year.end)}</b> (ваш новий робочий рік) правила змінюються: <b>${limitsNext().vacation} робочих днів відпустки</b> (разом із day-off) і <b>${limitsNext().sick} робочих днів лікарняних</b>. Субота й неділя більше не списуються.</li>` : ""}
           <li>${isCalendarYear()
             ? `Дні нараховуються на робочий рік. Для вас він збігається з календарним: з 1 січня по 31 грудня. Невикористані дні згорають <b>${humanY(yearLast())}</b>, а ${humanY(D.year.end)} нараховуються нові.`
             : `<b>Робочий рік</b> — період, за який нараховуються дні. Ваш: <b>${dots(D.year.start)} – ${dots(yearLast())}</b>. ${yearWhat()} Невикористані дні згорають в останній день робочого року, а наступного дня нараховуються нові.`}</li>
@@ -487,7 +506,7 @@ function renderSummary(ev) {
   let rows = `
     <div class="sum-row"><span class="k">Тип</span><span class="v">${t.ico} ${t.title}</span></div>
     <div class="sum-row"><span class="k">Дати</span><span class="v">${from === end ? humanY(from) : `${dots(from)} – ${dots(end)}`}</span></div>
-    <div class="sum-row"><span class="k">Кількість</span><span class="v">${daysW(ev.total)}</span></div>`;
+    <div class="sum-row"><span class="k">Кількість</span><span class="v">${daysW(ev.total)}${allWork(ev) ? " (робочі)" : ""}</span></div>`;
   if (ev.ok) {
     if (ev.inNext && ev.inCur) {
       rows += `<div class="sum-row"><span class="k">Спишеться</span><span class="v">${isCalendarYear()
@@ -500,12 +519,18 @@ function renderSummary(ev) {
     rows += `<div class="sum-row"><span class="k">Хто погоджує</span><span class="v">${D.approver || "не потрібно, фіксується одразу"}</span></div>`;
   }
   const bridgeNote = ev.added && ev.added.length ? `<div class="msg warn"><b>Додано ${daysW(ev.added.length)}: ${fmtRange(ev.added[0], ev.added[ev.added.length - 1])}</b><span class="how">Між цією і вашою іншою відпусткою/вихідним лише вихідні дні (субота, неділя). За правилами такі вихідні теж рахуються як відпустка.</span></div>` : "";
-  const weekendNote = !bridgeNote && ev.total > 1 && hasWeekend(from, end) ? `<div class="note">Субота й неділя в цьому періоді теж рахуються — дні календарні.</div>` : "";
-  const splitNote = ev.ok && ev.inNext && ev.inCur && !isCalendarYear() ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Ваш робочий рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими ${D.limits ? D.limits[S.type] : (S.type === "sick" ? 7 : 30)} днями ${TYPES[S.type].gen}. Тому дні до ${dots(yearLast())} спишуться зі старого залишку, а решта — з нового.</span></div>` : "";
+  const startCal = (from < D.year.end ? unitCur() : unitNext()) === "calendar";
+  const weekendNote = !bridgeNote && ev.ok && hasWeekend(from, end)
+    ? (startCal ? `<div class="note">Субота й неділя в цьому періоді теж рахуються — дні календарні.</div>`
+                : `<div class="note">Субота й неділя не рахуються — списуються лише робочі дні (пн–пт).</div>`) : "";
+  const splitNote = ev.ok && ev.inNext && ev.inCur && !isCalendarYear() ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Ваш робочий рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими ${limitsNext()[S.type]} ${unitNext() === "work" ? "робочими " : ""}днями ${TYPES[S.type].gen}. Тому дні до ${dots(yearLast())} спишуться зі старого залишку, а решта — з нового.</span></div>` : "";
   const err = !ev.ok ? `<div class="msg ${ev.level}" id="err"><b>${ev.title}</b><span class="how">${ev.how}</span></div>` : "";
   return `<h2>Перевірте</h2><div class="card">${rows}${bridgeNote}${weekendNote}${splitNote}${err}</div>`;
 }
 
+function allWork(ev) {   // усі списані дні — робочі (нові правила)
+  return (!ev.inCur || unitCur() === "work") && (!ev.inNext || unitNext() === "work") && !!(ev.inCur || ev.inNext);
+}
 function hasWeekend(a, b) {
   for (let d = a; d <= b; d = addDays(d, 1)) {
     const w = new Date(toUTC(d)).getUTCDay();
