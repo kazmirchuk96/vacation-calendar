@@ -141,30 +141,35 @@
  * ------------------------------------------------------------------ */
 const DEMO = {
   default: {
-    name: "Олена Демо", approver: "Тімлід Демо", admin: "Адмін Демо", adminGen: "Адміна Демо", today: "2026-11-19",
-    year: { start: "2026-01-01", end: "2027-01-01" },
-    balance: { vacation: { current: 2, next: 30 }, sick: { current: 5, next: 7 } },
+    name: "Олена Демо", approver: "Тімлід Демо", admin: "Адмін Демо", adminGen: "Адміна Демо", today: "2026-11-24",
+    year: { start: "2026-10-20", end: "2027-10-20" },
+    balance: { vacation: { current: 14, next: 21 }, sick: { current: 4, next: 4 } },
+    limits: { vacation: 17, sick: 4 }, limitsNext: { vacation: 21, sick: 4 }, units: { cur: "work", next: "work" },
+    newSystem: false, newFrom: "2027-10-20",
     busy: [
-      { from: "2026-11-16", to: "2026-11-16", type: "vacation", status: "approved" },
-      { from: "2026-12-03", to: "2026-12-05", type: "vacation", status: "pending" },
+      { from: "2026-12-07", to: "2026-12-07", type: "vacation", status: "approved" },
+      { from: "2026-12-16", to: "2026-12-18", type: "vacation", status: "pending" },
     ],
   },
   noApprover: {
-    name: "Керівник Демо", approver: null, today: "2026-11-19",
-    year: { start: "2026-01-01", end: "2027-01-01" },
-    balance: { vacation: { current: -5, next: 30 }, sick: { current: 5, next: 7 } },
+    name: "Керівник Демо", approver: null, today: "2026-11-24",
+    year: { start: "2026-01-01", end: "2027-01-01" }, units: { cur: "work", next: "work" }, newSystem: false, newFrom: "2027-01-01",
+    limits: { vacation: -4, sick: 3 }, limitsNext: { vacation: 21, sick: 4 },
+    balance: { vacation: { current: -4, next: 21 }, sick: { current: 3, next: 4 } },
     busy: [{ from: "2026-11-18", to: "2026-11-27", type: "vacation", status: "approved" }],
   },
   newbie: {
-    name: "Новачок Демо", approver: "Тімлід Демо", today: "2026-11-19",
-    year: { start: "2026-10-20", end: "2027-10-20", hired: "2025-10-20" },
-    balance: { vacation: { current: 25, next: 30 }, sick: { current: 7, next: 7 } },
+    name: "Новачок Демо", approver: "Тімлід Демо", today: "2026-11-24",
+    year: { start: "2026-11-24", end: "2027-11-24", hired: "2025-11-24" }, units: { cur: "work", next: "work" }, newSystem: true, accrued: 0,
+    limits: { vacation: 21, sick: 4 }, limitsNext: { vacation: 21, sick: 4 },
+    balance: { vacation: { current: 21, next: 21 }, sick: { current: 4, next: 4 } },
     busy: [{ from: "2026-11-09", to: "2026-11-13", type: "vacation", status: "approved" }],
   },
   lead: {
-    name: "Олена Демо", approver: "Тімлід Демо", byLead: "Тімлід Демо", today: "2026-11-19",
-    year: { start: "2026-01-01", end: "2027-01-01" },
-    balance: { vacation: { current: 8, next: 30 }, sick: { current: 5, next: 7 } },
+    name: "Олена Демо", approver: "Тімлід Демо", byLead: "Тімлід Демо", today: "2026-11-24",
+    year: { start: "2026-01-01", end: "2027-01-01" }, units: { cur: "work", next: "work" }, newSystem: false, newFrom: "2027-01-01",
+    limits: { vacation: 8, sick: 3 }, limitsNext: { vacation: 21, sick: 4 },
+    balance: { vacation: { current: 8, next: 21 }, sick: { current: 3, next: 4 } },
     busy: [], edit: { id: "7", type: "vacation", from: "2026-12-07", to: "2026-12-11", status: "approved" },
   },
 };
@@ -234,7 +239,8 @@ function plural(n, one, few, many) {
   if (b >= 2 && b <= 4) return few;
   return many;
 }
-const daysW = n => `${n} ${plural(n, "день", "дні", "днів")}`;
+const fmtNum = n => String(Math.round(n * 100) / 100).replace(".", ",");
+const daysW = n => `${fmtNum(n)} ${n % 1 ? "дня" : plural(n, "день", "дні", "днів")}`;
 const fmtRange = (a, b) => a === b ? human(a) : (parse(a).m === parse(b).m && parse(a).y === parse(b).y
   ? `${parse(a).d}–${human(b)}` : `${human(a)} – ${human(b)}`);
 
@@ -246,9 +252,10 @@ function yearWhat() {
     ? `Це 12 місяців, рахуючи від дня, коли ви почали працювати в компанії (${humanY(D.year.hired)}). Щороку ${human(D.year.hired)} він починається заново.`
     : `Для вас він збігається зі звичайним календарним роком: з 1 січня по 31 грудня.`;
 }
-const isCalendarYear = () => !D.year.hired;   // "-" у таблиці → робочий рік = календарний
+// З 1.12.2026 рік однаковий для всіх (1 грудня – 30 листопада) — окреме пояснення не потрібне.
+const isCalendarYear = () => false;   // підписи завжди датами («до 30.11.2026», «з 01.12.2026»)
 function yearCard() {
-  if (isCalendarYear()) return "";             // для календарного року пояснення не потрібне
+  return "";
   const vac = D.limits ? D.limits.vacation : 30, sick = D.limits ? D.limits.sick : 7;
   return `<details class="yr">
     <summary>📅 Ваш робочий рік: <b>${dots(D.year.start)} – ${dots(yearLast())}</b> <span class="q">Що це?</span></summary>
@@ -434,16 +441,19 @@ function render() {
       <details>
         <summary>Як рахуються дні?</summary>
         <ul>
-          <li>На робочий рік у вас <b>${(unitCur() === "work" ? workW : daysW)(D.limits ? D.limits.vacation : 30)} відпустки</b> і <b>${(unitCur() === "work" ? workW : daysW)(D.limits ? D.limits.sick : 7)} лікарняних</b>${D.hours && D.hours < 8 ? " (у вас неповний день, тому вдвічі менше)" : ""}.</li>
-          <li><b>Вихідні (day-off) входять у ці ${D.limits ? D.limits.vacation : 30} днів відпустки.</b> Кожен взятий вихідний зменшує залишок відпустки на 1 день.</li>
-          ${unitCur() === "work"
-            ? `<li>Рахуються лише <b>робочі дні</b> (пн–пт). Субота й неділя не списуються: тиждень відпустки з понеділка по неділю = 5 днів.</li>`
-            : `<li>Рахуються <b>календарні дні</b> — разом із суботами, неділями і святами. Тиждень відпустки з понеділка по неділю = 7 днів.</li>
-          <li>Якщо між двома вашими відпустками/вихідними лише субота й неділя, ці дні теж рахуються як відпустка.</li>`}
-          ${unitCur() !== unitNext() ? `<li>📌 <b>З ${humanY(D.year.end)}</b> (ваш новий робочий рік) правила змінюються: <b>${workW(limitsNext().vacation)} відпустки</b> (разом із day-off) і <b>${workW(limitsNext().sick)} лікарняних</b>. Субота й неділя більше не списуються.</li>` : ""}
-          <li>${isCalendarYear()
-            ? `Дні нараховуються на робочий рік. Для вас він збігається з календарним: з 1 січня по 31 грудня. Невикористані дні згорають <b>${humanY(yearLast())}</b>, а ${humanY(D.year.end)} нараховуються нові.`
-            : `<b>Робочий рік</b> — період, за який нараховуються дні. Ваш: <b>${dots(D.year.start)} – ${dots(yearLast())}</b>. ${yearWhat()} Невикористані дні згорають в останній день робочого року, а наступного дня нараховуються нові.`}</li>
+          ${(() => {
+            const per = fmtNum(1.75 * (D.hours || 8) / 8), ln = limitsNext();
+            const sys = (vac, sick) => `<li>За кожен відпрацьований місяць нараховується <b>${per} робочого дня</b> відпустки — <b>${workW(vac)}</b> на рік. Вихідні (day-off) — з цих самих днів.</li>
+          <li>Відпустку можна брати <b>наперед</b>, у межах доступних днів. Якщо звільнитесь, дні, взяті понад нараховане, <b>віднімуть із зарплати</b>.</li>
+          <li>Лікарняних — <b>${workW(sick)}</b> на рік.</li>`;
+            return D.newSystem === false && D.newFrom
+              ? `<li>До <b>${humanY(yearLast())}</b> у вас діє залишок, перерахований у робочі дні (його видно вище).</li>
+          <li>📌 З <b>${humanY(D.newFrom)}</b> (ваш новий робочий рік) — нова система:</li>${sys(ln.vacation, ln.sick)}`
+              : sys(D.limits ? D.limits.vacation : 21, D.limits ? D.limits.sick : 4);
+          })()}
+          <li>Рахуються лише <b>робочі дні</b> (пн–пт): тиждень відпустки = 5 днів.</li>
+          <li>Невикористані дні згорають у кінці робочого року — <b>${humanY(yearLast())}</b>.</li>
+          <li>Якщо днів не лишилось, відпустку за власний рахунок оформлюють індивідуально.</li>
           <li>${D.approver
             ? `Ваш запит погоджує <b>${D.approver}</b> — і відпустку, і лікарняний. Відповідь прийде повідомленням у чат з ботом; якщо запит відхилять, там буде вказана причина.${D.adminGen && D.admin !== D.approver ? ` Якщо погоджувач відсутній, зверніться до <b>${D.adminGen}</b>.` : ""}`
             : "Вам погодження не потрібне — запис фіксується одразу."}</li>
@@ -453,7 +463,7 @@ function render() {
     ${IS_DEMO && !inTg ? `<div class="demo">Демо-режим ·
       <select id="demo"><option value="default">Співробітник з тімлідом, мало днів</option>
       <option value="noApprover">Без погоджувача, у мінусі</option>
-      <option value="newbie">Робочий рік з жовтня</option>
+      <option value="newbie">Уже за новою системою</option>
       <option value="lead">Тімлід змінює відсутність співробітника</option></select></div>` : ""}
   `;
   if (IS_DEMO && !inTg) {
@@ -535,7 +545,7 @@ function renderSummary(ev) {
     ? (mixed ? `<div class="note">До ${dots(yearLast())} субота й неділя рахуються (старі правила, дні календарні), а з ${dots(D.year.end)} списуються лише робочі дні (пн–пт).</div>`
       : startCal ? `<div class="note">Субота й неділя в цьому періоді теж рахуються — дні календарні.</div>`
                  : `<div class="note">Субота й неділя не рахуються — списуються лише робочі дні (пн–пт).</div>`) : "";
-  const splitNote = ev.ok && ev.inNext && ev.inCur && !isCalendarYear() ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Ваш робочий рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими днями ${TYPES[S.type].gen} (${(unitNext() === "work" ? workW : daysW)(limitsNext()[S.type])}). Тому дні до ${dots(yearLast())} спишуться зі старого залишку, а решта — з нового.</span></div>` : "";
+  const splitNote = ev.ok && ev.inNext && ev.inCur ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими днями ${TYPES[S.type].gen} (${(unitNext() === "work" ? workW : daysW)(limitsNext()[S.type])}). Тому дні до ${dots(yearLast())} спишуться з поточного залишку, а решта — з нового.</span></div>` : "";
   const err = !ev.ok ? `<div class="msg ${ev.level}" id="err"><b>${ev.title}</b><span class="how">${ev.how}</span></div>` : "";
   return `<h2>Перевірте</h2><div class="card">${rows}${bridgeNote}${weekendNote}${splitNote}${err}</div>`;
 }
