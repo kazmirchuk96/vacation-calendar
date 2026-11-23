@@ -161,6 +161,12 @@ const DEMO = {
     balance: { vacation: { current: 25, next: 30 }, sick: { current: 7, next: 7 } },
     busy: [{ from: "2026-11-09", to: "2026-11-13", type: "vacation", status: "approved" }],
   },
+  lead: {
+    name: "Олена Демо", approver: "Тімлід Демо", byLead: "Тімлід Демо", today: "2026-11-19",
+    year: { start: "2026-01-01", end: "2027-01-01" },
+    balance: { vacation: { current: 8, next: 30 }, sick: { current: 5, next: 7 } },
+    busy: [], edit: { id: "7", type: "vacation", from: "2026-12-07", to: "2026-12-11", status: "approved" },
+  },
 };
 
 const TYPES = {
@@ -209,6 +215,7 @@ async function boot() {
 }
 
 /* ---------- дати як рядки YYYY-MM-DD, без часових поясів ---------- */
+const esc = t => String(t || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const pad = n => String(n).padStart(2, "0");
 const iso = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
 const parse = s => { const [y, m, d] = s.split("-").map(Number); return { y, m: m - 1, d }; };
@@ -354,7 +361,7 @@ function evaluate() {
     const avail = Math.max(0, bal.current);
     return { ...base, ok: false, level: "err", inCur, inNext,
       title: avail === 0
-        ? `У вас не залишилось днів ${t.gen} до ${humanY(addDays(D.year.end, -1))}.`
+        ? `${D.byLead ? "У співробітника" : "У вас"} не залишилось днів ${t.gen} до ${humanY(addDays(D.year.end, -1))}.`
         : `Не вистачає днів ${t.gen}: доступно ${daysW(avail)}, а обрано ${daysW(inCur)}.`,
       how: avail === 0
         ? `Нові ${t.gen === "відпустки" ? "дні відпустки" : "дні лікарняних"} нарахуються ${humanY(D.year.end)}. Можна обрати дати, починаючи з цього дня.`
@@ -395,15 +402,16 @@ function render() {
 
   // інструкція над календарем
   let instr;
-  if (!S.start) instr = "Натисніть на <b>перший день</b>, коли вас не буде.";
+  if (!S.start) instr = D.byLead ? "Натисніть на <b>перший день</b> відсутності." : "Натисніть на <b>перший день</b>, коли вас не буде.";
   else if (!S.end) instr = `Обрано <b>${human(S.start)}</b>. Якщо вас не буде кілька днів — натисніть на <b>останній день</b>. Якщо лише один день — нічого більше не треба.`;
   else instr = `Обрано <b>${fmtRange(S.start, S.end)}</b>. Щоб обрати інші дати, просто натисніть на новий перший день.`;
 
   $app.innerHTML = `
-    ${D.edit ? `<div class="msg info" style="margin:0 0 10px"><b>Зміна запиту №${EDIT_ID}</b><span class="how">Зараз: ${fmtRange(D.edit.from, D.edit.to)}${D.edit.status === "approved" ? " (уже погоджено)" : ""}. Оберіть нові дати й натисніть «Надіслати».${D.edit.status === "approved" ? " Поки тімлід не погодить нові дати, діють старі." : " Старий запит заміниться новим."}</span></div>` : ""}
+    ${D.byLead && D.edit ? `<div class="msg info" style="margin:0 0 10px"><b>Зміна відсутності: ${esc(D.name)}</b><span class="how">Зараз: ${fmtRange(D.edit.from, D.edit.to)}. Оберіть нові дати й натисніть «Зберегти». Ви погоджувач, тож нові дати одразу запишуться в таблицю, а співробітник отримає повідомлення.</span></div>` : ""}
+    ${D.edit && !D.byLead ? `<div class="msg info" style="margin:0 0 10px"><b>Зміна запиту</b><span class="how">Зараз: ${fmtRange(D.edit.from, D.edit.to)}${D.edit.status === "approved" ? " (уже погоджено)" : ""}. Оберіть нові дати й натисніть «Надіслати».${D.edit.status === "approved" ? " Поки тімлід не погодить нові дати, діють старі." : " Старий запит заміниться новим."}</span></div>` : ""}
     ${S.serverErr ? `<div class="msg err" style="margin:0 0 10px"><b>${S.serverErr.title}</b><span class="how">${S.serverErr.how || ""}</span></div>` : ""}
     <h2><span class="step">1</span>Що оформлюємо</h2>
-    <div class="card"><div class="types">${typeBtn("vacation")}${typeBtn("sick")}</div>${yearCard()}</div>
+    <div class="card"><div class="types">${typeBtn("vacation")}${typeBtn("sick")}</div>${D.byLead ? "" : yearCard()}</div>
 
     <h2><span class="step">2</span>Оберіть дати</h2>
     <div class="card">
@@ -420,9 +428,9 @@ function render() {
 
     ${S.start && ev.ok ? `
     <h2><span class="step">3</span>Коментар (необов'язково)</h2>
-    <div class="card"><textarea id="comment" rows="2" maxlength="200" placeholder="${S.type === "sick" ? "Наприклад: застуда, буду на звʼязку" : "Наприклад: поїздка, хто підмінить"}"></textarea></div>` : ""}
+    <div class="card"><textarea id="comment" rows="2" maxlength="200" placeholder="${D.byLead ? "Наприклад: плани змінились — співробітник побачить коментар" : S.type === "sick" ? "Наприклад: застуда, буду на звʼязку" : "Наприклад: поїздка, хто підмінить"}"></textarea></div>` : ""}
 
-    <div class="card">
+    <div class="card"${D.byLead ? ' style="display:none"' : ""}>
       <details>
         <summary>Як рахуються дні?</summary>
         <ul>
@@ -445,7 +453,8 @@ function render() {
     ${IS_DEMO && !inTg ? `<div class="demo">Демо-режим ·
       <select id="demo"><option value="default">Співробітник з тімлідом, мало днів</option>
       <option value="noApprover">Без погоджувача, у мінусі</option>
-      <option value="newbie">Робочий рік з жовтня</option></select></div>` : ""}
+      <option value="newbie">Робочий рік з жовтня</option>
+      <option value="lead">Тімлід змінює відсутність співробітника</option></select></div>` : ""}
   `;
   if (IS_DEMO && !inTg) {
     const sel = document.getElementById("demo");
@@ -517,7 +526,7 @@ function renderSummary(ev) {
     rows += `<div class="sum-row"><span class="k">Залишиться ${t.gen}</span><span class="v">${
       ev.inCur ? daysW(ev.leftCur) + (ev.inNext ? (isCalendarYear() ? ` у ${parse(D.year.start).y}` : ` до ${dots(yearLast())}`) : "") : ""}${
       ev.inCur && ev.inNext ? "<br>" : ""}${ev.inNext ? daysW(ev.leftNext) + (isCalendarYear() ? ` у ${parse(D.year.end).y}` : ` у новому році (від ${dots(D.year.end)})`) : ""}</span></div>`;
-    rows += `<div class="sum-row"><span class="k">Хто погоджує</span><span class="v">${D.approver || "не потрібно, фіксується одразу"}</span></div>`;
+    rows += `<div class="sum-row"><span class="k">Хто погоджує</span><span class="v">${D.byLead ? "ви — записується одразу" : D.approver || "не потрібно, фіксується одразу"}</span></div>`;
   }
   const bridgeNote = ev.added && ev.added.length ? `<div class="msg warn"><b>Додано ${daysW(ev.added.length)}: ${fmtRange(ev.added[0], ev.added[ev.added.length - 1])}</b><span class="how">Між цією і вашою іншою відпусткою/вихідним лише вихідні дні (субота, неділя). За правилами такі вихідні теж рахуються як відпустка.</span></div>` : "";
   const startCal = (from < D.year.end ? unitCur() : unitNext()) === "calendar";
@@ -567,7 +576,7 @@ function updateButton(ev) {
   let label, ready = false;
   if (!S.start) label = "Спочатку оберіть дати в календарі";
   else if (!ev.ok) label = "Виправте дати — причина вище";
-  else { ready = true; label = D.approver ? `Надіслати запит (${daysW(ev.total)})` : `Зафіксувати (${daysW(ev.total)})`; }
+  else { ready = true; label = D.byLead ? `Зберегти нові дати (${daysW(ev.total)})` : D.approver ? `Надіслати запит (${daysW(ev.total)})` : `Зафіксувати (${daysW(ev.total)})`; }
   btnState = { label, ready };
   if (!inTg) document.getElementById("bar").style.display = "";
   if (inTg) {
@@ -592,7 +601,7 @@ function onMain() {
   const ev = evaluate();
   const body = { action: "submit", initData: inTg ? tg.initData : "", type: S.type, from: S.start, to: S.end || S.start,
                  comment: S.comment.trim(), editId: EDIT_ID || "" };
-  if (IS_DEMO) { S.result = { ok: true, mode: D.approver ? "sent" : "auto", approver: D.approver }; S.final = ev; S.sent = true; render(); return; }
+  if (IS_DEMO) { S.result = { ok: true, mode: D.byLead ? "lead" : D.approver ? "sent" : "auto", approver: D.approver }; S.final = ev; S.sent = true; render(); return; }
   S.sending = true; S.serverErr = null; setSending(true);
   api("POST", body).then(res => {
     S.sending = false;
@@ -627,6 +636,13 @@ function renderDone() {
   const ev = S.final || {};
   const from = ev.from || S.start, end = ev.to || S.end || S.start;
   const auto = S.result && S.result.mode === "auto";
+  if (S.result && S.result.mode === "lead") {
+    $app.innerHTML = `<div class="card done"><div class="big">✅</div><h3>Збережено</h3>
+      <p>${esc(D.name)} · ${TYPES[S.type].title}: ${from === end ? humanY(from) : `${dots(from)} – ${dots(end)}`} (${daysW(ev.total || 1)}).</p>
+      <p style="color:var(--hint)">Таблицю оновлено, співробітник отримав повідомлення в чаті з ботом.</p>
+      ${inTg ? `<button class="retry" onclick="Telegram.WebApp.close()">Закрити</button>` : ""}</div>`;
+    return hideButton();
+  }
   const who = (S.result && S.result.approver) || D.approver;
   $app.innerHTML = `<div class="card done"><div class="big">✅</div>
     <h3>${auto ? "Записано" : "Запит надіслано"}</h3>
