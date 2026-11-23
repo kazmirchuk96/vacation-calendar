@@ -143,9 +143,9 @@ const DEMO = {
   default: {
     name: "Олена Демо", approver: "Тімлід Демо", admin: "Адмін Демо", adminGen: "Адміна Демо", today: "2026-11-24",
     year: { start: "2026-10-20", end: "2027-10-20" },
-    balance: { vacation: { current: 14, next: 21 }, sick: { current: 4, next: 4 } },
-    limits: { vacation: 17, sick: 4 }, limitsNext: { vacation: 21, sick: 4 }, units: { cur: "work", next: "work" },
-    newSystem: false, newFrom: "2027-10-20",
+    balance: { vacation: { current: 25, next: 21 }, sick: { current: 7, next: 5 } },
+    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 7 },
+    units: { cur: "calendar", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: false, newFrom: "2027-10-20",
     busy: [
       { from: "2026-12-07", to: "2026-12-07", type: "vacation", status: "approved" },
       { from: "2026-12-16", to: "2026-12-18", type: "vacation", status: "pending" },
@@ -153,23 +153,23 @@ const DEMO = {
   },
   noApprover: {
     name: "Керівник Демо", approver: null, today: "2026-11-24",
-    year: { start: "2026-01-01", end: "2027-01-01" }, units: { cur: "work", next: "work" }, newSystem: false, newFrom: "2027-01-01",
-    limits: { vacation: -4, sick: 3 }, limitsNext: { vacation: 21, sick: 4 },
-    balance: { vacation: { current: -4, next: 21 }, sick: { current: 3, next: 4 } },
+    year: { start: "2026-01-01", end: "2027-01-01" }, units: { cur: "calendar", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: false, newFrom: "2027-01-01",
+    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 5 },
+    balance: { vacation: { current: -5, next: 21 }, sick: { current: 5, next: 5 } },
     busy: [{ from: "2026-11-18", to: "2026-11-27", type: "vacation", status: "approved" }],
   },
   newbie: {
     name: "Новачок Демо", approver: "Тімлід Демо", today: "2026-11-24",
-    year: { start: "2026-11-24", end: "2027-11-24", hired: "2025-11-24" }, units: { cur: "work", next: "work" }, newSystem: true, accrued: 0,
-    limits: { vacation: 21, sick: 4 }, limitsNext: { vacation: 21, sick: 4 },
-    balance: { vacation: { current: 21, next: 21 }, sick: { current: 4, next: 4 } },
+    year: { start: "2026-11-21", end: "2027-11-21", hired: "2024-11-21" }, units: { cur: "work", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: true, accrued: 0,
+    limits: { vacation: 21, sick: 7 }, limitsNext: { vacation: 21, sick: 5 },
+    balance: { vacation: { current: 21, next: 21 }, sick: { current: 7, next: 5 } },
     busy: [{ from: "2026-11-09", to: "2026-11-13", type: "vacation", status: "approved" }],
   },
   lead: {
     name: "Олена Демо", approver: "Тімлід Демо", byLead: "Тімлід Демо", today: "2026-11-24",
-    year: { start: "2026-01-01", end: "2027-01-01" }, units: { cur: "work", next: "work" }, newSystem: false, newFrom: "2027-01-01",
-    limits: { vacation: 8, sick: 3 }, limitsNext: { vacation: 21, sick: 4 },
-    balance: { vacation: { current: 8, next: 21 }, sick: { current: 3, next: 4 } },
+    year: { start: "2026-01-01", end: "2027-01-01" }, units: { cur: "calendar", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: false, newFrom: "2027-01-01",
+    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 5 },
+    balance: { vacation: { current: 8, next: 21 }, sick: { current: 5, next: 5 } },
     busy: [], edit: { id: "7", type: "vacation", from: "2026-12-07", to: "2026-12-11", status: "approved" },
   },
 };
@@ -304,8 +304,10 @@ function busyLabel(b) {
 /* ---------- одиниці: календарні (старі правила) або робочі дні (з 2027), як vtCountDays_ у боті ---------- */
 const isWeekend = d => { const w = new Date(toUTC(d)).getUTCDay(); return w === 0 || w === 6; };
 const workW = n => `${n} ${plural(n, "робочий день", "робочі дні", "робочих днів")}`;
-const unitCur = () => (D.units && D.units.cur) || "calendar";
-const unitNext = () => (D.units && D.units.next) || "calendar";
+// одиниці — для обраного типу: відпустка (нова система — пн–пт) і лікарняні (як було) рахуються окремо
+const unitsOf = () => (S.type === "sick" && D.units && D.units.sick) ? D.units.sick : (D.units || {});
+const unitCur = () => unitsOf().cur || "calendar";
+const unitNext = () => unitsOf().next || "calendar";
 const limitsNext = () => D.limitsNext || D.limits || { vacation: 30, sick: 7 };
 function countDays(a, b, unit) {
   if (b < a) return 0;
@@ -401,7 +403,11 @@ function render() {
 
   const typeBtn = k => {
     const b = bal[k].current;
-    const left = b > 0 ? `Залишилось <b>${daysW(b)}</b> · згорять ${yearEndHuman}` : `<b>Днів не залишилось</b> · нові будуть ${humanY(D.year.end)}`;
+    const u = (k === "sick" && D.units && D.units.sick ? D.units.sick.cur : D.units && D.units.cur) || "calendar";
+    const unitDays = n => unitDaysW(n, u);
+    // узгодження: «залишився 21 день», «залишилося 3 дні / 25 днів / 1,5 дня»
+    const leftVerb = n => n % 1 === 0 && n % 10 === 1 && n % 100 !== 11 ? "Залишився" : "Залишилося";
+    const left = b > 0 ? `${leftVerb(b)} <b>${unitDays(b)}</b> · діють до ${yearEndHuman}` : `<b>Днів не залишилось</b> · нові будуть ${humanY(D.year.end)}`;
     return `<button class="type ${S.type === k ? "sel" : ""}" data-type="${k}">
       <span class="ico">${TYPES[k].ico}</span>
       <span><div class="t">${TYPES[k].title}</div><div class="s">${left}</div></span></button>`;
@@ -443,17 +449,17 @@ function render() {
         <ul>
           ${(() => {
             const per = fmtNum(1.75 * (D.hours || 8) / 8), ln = limitsNext();
-            const sys = (vac, sick) => `<li>За кожен відпрацьований місяць нараховується <b>${per} робочого дня</b> відпустки — <b>${workW(vac)}</b> на рік. Вихідні (day-off) — з цих самих днів.</li>
-          <li>Відпустку можна брати <b>наперед</b>, у межах доступних днів. Якщо звільнитесь, дні, взяті понад нараховане, <b>віднімуть із зарплати</b>.</li>
-          <li>Лікарняних — <b>${workW(sick)}</b> на рік.</li>`;
+            const sys = vac => `<li>За кожен відпрацьований місяць вам нараховується <b>${per} робочого дня</b> відпустки — це <b>${workW(vac)}</b> на рік. Вихідні (day-off) беруться з цих самих днів. Рахуються лише робочі дні.</li>
+          <li>Відпустку можна брати <b>наперед</b>, у межах доступних днів. У разі звільнення дні, використані понад нараховане, <b>віднімаються від зарплати</b>.</li>`;
+            const sickNew = l => `<li>Лікарняних — <b>${workW(l)}</b> на рік.</li>`;
             return D.newSystem === false && D.newFrom
-              ? `<li>До <b>${humanY(yearLast())}</b> у вас діє залишок, перерахований у робочі дні (його видно вище).</li>
-          <li>📌 З <b>${humanY(D.newFrom)}</b> (ваш новий робочий рік) — нова система:</li>${sys(ln.vacation, ln.sick)}`
-              : sys(D.limits ? D.limits.vacation : 21, D.limits ? D.limits.sick : 4);
+              ? `<li>До <b>${humanY(yearLast())}</b> (кінець вашого робочого року) для вас діють попередні правила: <b>${unitDaysW(D.limits ? D.limits.vacation : 30, "calendar")}</b> відпустки і <b>${unitDaysW(D.limits ? D.limits.sick : 7, "calendar")}</b> лікарняних на рік (разом із суботою й неділею).</li>
+          <li>📌 З <b>${humanY(D.newFrom)}</b> (ваш новий робочий рік) у вас діятиме нова система:</li>${sys(ln.vacation)}${sickNew(ln.sick)}`
+              : sys(21) + sickNew(D.limits ? D.limits.sick : 4);
           })()}
-          <li>Рахуються лише <b>робочі дні</b> (пн–пт): тиждень відпустки = 5 днів.</li>
-          <li>Невикористані дні згорають у кінці робочого року — <b>${humanY(yearLast())}</b>.</li>
-          <li>Якщо днів не лишилось, відпустку за власний рахунок оформлюють індивідуально.</li>
+          ${unitCur() === "calendar" && S.type !== "sick" ? `<li>Якщо між двома вашими відпустками/вихідними лише субота й неділя, вони теж рахуються як відпустка.</li>` : ""}
+          <li>Дні діють до <b>${humanY(yearLast())}</b> включно і на наступний рік не переносяться.</li>
+          <li>Якщо днів не лишилось, відпустку за власний рахунок можна оформити індивідуально — зверніться до свого тімліда.</li>
           <li>${D.approver
             ? `Ваш запит погоджує <b>${D.approver}</b> — і відпустку, і лікарняний. Відповідь прийде повідомленням у чат з ботом; якщо запит відхилять, там буде вказана причина.${D.adminGen && D.admin !== D.approver ? ` Якщо погоджувач відсутній, зверніться до <b>${D.adminGen}</b>.` : ""}`
             : "Вам погодження не потрібне — запис фіксується одразу."}</li>
@@ -526,7 +532,7 @@ function renderSummary(ev) {
   let rows = `
     <div class="sum-row"><span class="k">Тип</span><span class="v">${t.ico} ${t.title}</span></div>
     <div class="sum-row"><span class="k">Дати</span><span class="v">${from === end ? humanY(from) : `${dots(from)} – ${dots(end)}`}</span></div>
-    <div class="sum-row"><span class="k">Кількість</span><span class="v">${daysW(ev.total)}${allWork(ev) ? " (робочі)" : ""}</span></div>`;
+    <div class="sum-row"><span class="k">Кількість</span><span class="v">${evDaysW(ev)}</span></div>`;
   if (ev.ok) {
     if (ev.inNext && ev.inCur) {
       rows += `<div class="sum-row"><span class="k">Спишеться</span><span class="v">${isCalendarYear()
@@ -534,22 +540,28 @@ function renderSummary(ev) {
         : `${daysW(ev.inCur)} — з днів до ${dots(yearLast())},<br>${daysW(ev.inNext)} — з нових днів (від ${dots(D.year.end)})`}</span></div>`;
     }
     rows += `<div class="sum-row"><span class="k">Залишиться ${t.gen}</span><span class="v">${
-      ev.inCur ? daysW(ev.leftCur) + (ev.inNext ? (isCalendarYear() ? ` у ${parse(D.year.start).y}` : ` до ${dots(yearLast())}`) : "") : ""}${
-      ev.inCur && ev.inNext ? "<br>" : ""}${ev.inNext ? daysW(ev.leftNext) + (isCalendarYear() ? ` у ${parse(D.year.end).y}` : ` у новому році (від ${dots(D.year.end)})`) : ""}</span></div>`;
+      ev.inCur ? daysW(ev.leftCur) + uWord(unitCur()) + (ev.inNext ? (isCalendarYear() ? ` у ${parse(D.year.start).y}` : ` до ${dots(yearLast())}`) : "") : ""}${
+      ev.inCur && ev.inNext ? "<br>" : ""}${ev.inNext ? daysW(ev.leftNext) + uWord(unitNext()) + (isCalendarYear() ? ` у ${parse(D.year.end).y}` : ` у новому році (від ${dots(D.year.end)})`) : ""}</span></div>`;
     rows += `<div class="sum-row"><span class="k">Хто погоджує</span><span class="v">${D.byLead ? "ви — записується одразу" : D.approver || "не потрібно, фіксується одразу"}</span></div>`;
   }
   const bridgeNote = ev.added && ev.added.length ? `<div class="msg warn"><b>Додано ${daysW(ev.added.length)}: ${fmtRange(ev.added[0], ev.added[ev.added.length - 1])}</b><span class="how">Між цією і вашою іншою відпусткою/вихідним лише вихідні дні (субота, неділя). За правилами такі вихідні теж рахуються як відпустка.</span></div>` : "";
   const startCal = (from < D.year.end ? unitCur() : unitNext()) === "calendar";
   const mixed = ev.inCur && ev.inNext && unitCur() !== unitNext();
   const weekendNote = !bridgeNote && ev.ok && hasWeekend(from, end)
-    ? (mixed ? `<div class="note">До ${dots(yearLast())} субота й неділя рахуються (старі правила, дні календарні), а з ${dots(D.year.end)} списуються лише робочі дні (пн–пт).</div>`
+    ? (mixed ? `<div class="note">До ${dots(yearLast())} субота й неділя рахуються (старі правила, дні календарні), а з ${dots(D.year.end)} списуються лише робочі дні.</div>`
       : startCal ? `<div class="note">Субота й неділя в цьому періоді теж рахуються — дні календарні.</div>`
-                 : `<div class="note">Субота й неділя не рахуються — списуються лише робочі дні (пн–пт).</div>`) : "";
+                 : `<div class="note">Субота й неділя не рахуються — списуються лише робочі дні.</div>`) : "";
   const splitNote = ev.ok && ev.inNext && ev.inCur ? `<div class="msg info"><b>Чому дні діляться на дві частини?</b><span class="how">Рік закінчується ${humanY(yearLast())}, а ${humanY(D.year.end)} починається новий — з новими днями ${TYPES[S.type].gen} (${(unitNext() === "work" ? workW : daysW)(limitsNext()[S.type])}). Тому дні до ${dots(yearLast())} спишуться з поточного залишку, а решта — з нового.</span></div>` : "";
   const err = !ev.ok ? `<div class="msg ${ev.level}" id="err"><b>${ev.title}</b><span class="how">${ev.how}</span></div>` : "";
   return `<h2>Перевірте</h2><div class="card">${rows}${bridgeNote}${weekendNote}${splitNote}${err}</div>`;
 }
 
+const uWord = u => u === "work" ? " (робочих)" : " (календарних)";
+const unitDaysW = (n, u) => `${fmtNum(n)} ${n % 1 ? (u === "work" ? "робочого дня" : "календарного дня")
+  : plural(n, u === "work" ? "робочий день" : "календарний день", u === "work" ? "робочі дні" : "календарні дні", u === "work" ? "робочих днів" : "календарних днів")}`;
+// одиниці списаних днів запиту (якщо частини в різних роках з різними одиницями — без уточнення)
+const evUnit = ev => ev.inCur && ev.inNext && unitCur() !== unitNext() ? null : (ev.inCur ? unitCur() : unitNext());
+const evDaysW = ev => evUnit(ev) ? unitDaysW(ev.total, evUnit(ev)) : daysW(ev.total);
 function allWork(ev) {   // усі списані дні — робочі (нові правила)
   return (!ev.inCur || unitCur() === "work") && (!ev.inNext || unitNext() === "work") && !!(ev.inCur || ev.inNext);
 }
@@ -586,7 +598,7 @@ function updateButton(ev) {
   let label, ready = false;
   if (!S.start) label = "Спочатку оберіть дати в календарі";
   else if (!ev.ok) label = "Виправте дати — причина вище";
-  else { ready = true; label = D.byLead ? `Зберегти нові дати (${daysW(ev.total)})` : D.approver ? `Надіслати запит (${daysW(ev.total)})` : `Зафіксувати (${daysW(ev.total)})`; }
+  else { ready = true; label = D.byLead ? `Зберегти нові дати (${evDaysW(ev)})` : D.approver ? `Надіслати запит (${evDaysW(ev)})` : `Зафіксувати (${evDaysW(ev)})`; }
   btnState = { label, ready };
   if (!inTg) document.getElementById("bar").style.display = "";
   if (inTg) {
