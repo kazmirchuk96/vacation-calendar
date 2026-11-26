@@ -144,7 +144,7 @@ const DEMO = {
     name: "Олена Демо", approver: "Тімлід Демо", admin: "Адмін Демо", adminGen: "Адміна Демо", today: "2026-11-24",
     year: { start: "2026-10-20", end: "2027-10-20" },
     balance: { vacation: { current: 25, next: 21 }, sick: { current: 7, next: 5 } },
-    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 7 },
+    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 4 },
     units: { cur: "calendar", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: false, newFrom: "2027-10-20",
     busy: [
       { from: "2026-12-07", to: "2026-12-07", type: "vacation", status: "approved" },
@@ -154,21 +154,21 @@ const DEMO = {
   noApprover: {
     name: "Керівник Демо", approver: null, today: "2026-11-24",
     year: { start: "2026-01-01", end: "2027-01-01" }, units: { cur: "calendar", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: false, newFrom: "2027-01-01",
-    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 5 },
+    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 4 },
     balance: { vacation: { current: -5, next: 21 }, sick: { current: 5, next: 5 } },
     busy: [{ from: "2026-11-18", to: "2026-11-27", type: "vacation", status: "approved" }],
   },
   newbie: {
     name: "Новачок Демо", approver: "Тімлід Демо", today: "2026-11-24",
     year: { start: "2026-11-21", end: "2027-11-21", hired: "2024-11-21" }, units: { cur: "work", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: true, accrued: 0,
-    limits: { vacation: 21, sick: 7 }, limitsNext: { vacation: 21, sick: 5 },
+    limits: { vacation: 21, sick: 4 }, limitsNext: { vacation: 21, sick: 4 },
     balance: { vacation: { current: 21, next: 21 }, sick: { current: 7, next: 5 } },
     busy: [{ from: "2026-11-09", to: "2026-11-13", type: "vacation", status: "approved" }],
   },
   lead: {
     name: "Олена Демо", approver: "Тімлід Демо", byLead: "Тімлід Демо", today: "2026-11-24",
     year: { start: "2026-01-01", end: "2027-01-01" }, units: { cur: "calendar", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: false, newFrom: "2027-01-01",
-    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 5 },
+    limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 4 },
     balance: { vacation: { current: 8, next: 21 }, sick: { current: 5, next: 5 } },
     busy: [], edit: { id: "7", type: "vacation", from: "2026-12-07", to: "2026-12-11", status: "approved" },
   },
