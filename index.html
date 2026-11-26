@@ -127,6 +127,7 @@
   .done .big { font-size: 56px; }
   .demo { font-size: 12px; color: var(--hint); text-align: center; margin-top: 6px; }
   .demo select { font: inherit; }
+  .rules-h { margin: 10px 0 2px; }
 </style>
 </head>
 <body>
@@ -142,7 +143,7 @@
 const DEMO = {
   default: {
     name: "Олена Демо", approver: "Тімлід Демо", admin: "Адмін Демо", adminGen: "Адміна Демо", today: "2026-11-24",
-    year: { start: "2026-10-20", end: "2027-10-20" },
+    year: { start: "2026-10-20", end: "2027-10-20", hired: "2025-10-20" },
     balance: { vacation: { current: 25, next: 21 }, sick: { current: 7, next: 5 } },
     limits: { vacation: 30, sick: 7 }, limitsNext: { vacation: 21, sick: 4 },
     units: { cur: "calendar", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: false, newFrom: "2027-10-20",
@@ -160,9 +161,9 @@ const DEMO = {
   },
   newbie: {
     name: "Новачок Демо", approver: "Тімлід Демо", today: "2026-11-24",
-    year: { start: "2026-11-21", end: "2027-11-21", hired: "2024-11-21" }, units: { cur: "work", next: "work", sick: { cur: "calendar", next: "work" } }, newSystem: true, accrued: 0,
+    year: { start: "2026-11-21", end: "2027-11-21", hired: "2024-11-21" }, units: { cur: "work", next: "work", sick: { cur: "work", next: "work" } }, newSystem: true, accrued: 0,
     limits: { vacation: 21, sick: 4 }, limitsNext: { vacation: 21, sick: 4 },
-    balance: { vacation: { current: 21, next: 21 }, sick: { current: 7, next: 5 } },
+    balance: { vacation: { current: 21, next: 21 }, sick: { current: 4, next: 4 } },
     busy: [{ from: "2026-11-09", to: "2026-11-13", type: "vacation", status: "approved" }],
   },
   lead: {
@@ -203,14 +204,14 @@ async function boot() {
     IS_DEMO = true; init(DEMO[QS.get("demo")] || DEMO.default); return;
   }
   if (!tg.initData) {                       // відкрито кнопкою звичайної клавіатури — Telegram не дає підпису
-    return renderFatal("Календар відкрито не тією кнопкою.", "Закрийте це вікно і натисніть синю кнопку «Подати запит» зліва від поля вводу в чаті з ботом.");
+    return renderFatal("Календар відкривається іншою кнопкою.", "Закрийте це вікно і натисніть синю кнопку «Подати запит» зліва від поля вводу в чаті з ботом.");
   }
   renderLoading();
   try {
     const res = await api("GET", { action: "state", initData: tg.initData, edit: EDIT_ID || "" });
     if (!res.ok) return renderFatal(res.title, res.how);
     if (res.data.approverMissing) {           // інакше кнопка обіцяла б «Зафіксувати», а сервер відмовив би
-      return renderFatal("Поки що подати запит тут не вийде.",
+      return renderFatal("Поки що подати запит тут не вдасться.",
         (res.data.approverMissingText || `Для вас ще не вказано, хто погоджує запити. Якщо відсутність термінова, зверніться до <b>${res.data.adminGen || "адміністратора"}</b>.`) + " Про це вже надіслано сповіщення.", true);
     }
     init(res.data);
@@ -373,7 +374,7 @@ function evaluate() {
         ? `${D.byLead ? "У співробітника" : "У вас"} не залишилось днів ${t.gen} до ${humanY(addDays(D.year.end, -1))}.`
         : `Не вистачає днів ${t.gen}: доступно ${daysW(avail)}, а обрано ${daysW(inCur)}.`,
       how: avail === 0
-        ? `Нові ${t.gen === "відпустки" ? "дні відпустки" : "дні лікарняних"} нарахуються ${humanY(D.year.end)}. Можна обрати дати, починаючи з цього дня.`
+        ? `Нові ${t.gen === "відпустки" ? "дні відпустки" : "дні лікарняних"} нарахуються ${humanY(D.year.end)}. Можна обрати дати, починаючи з цього дня.${t.gen === "відпустки" && !D.byLead ? " Якщо відпочинок потрібен раніше, відпустку за власний рахунок можна оформити індивідуально — зверніться до свого тімліда." : ""}`
         : `Скоротіть період на ${daysW(inCur - avail)}.` };
   }
   if (inNext > 0 && leftNext < 0) {
@@ -446,25 +447,40 @@ function render() {
     <div class="card"${D.byLead ? ' style="display:none"' : ""}>
       <details>
         <summary>Як рахуються дні?</summary>
-        <ul>
-          ${(() => {
-            const per = fmtNum(1.75 * (D.hours || 8) / 8), ln = limitsNext();
-            const sys = vac => `<li>За кожен відпрацьований місяць вам нараховується <b>${per} робочого дня</b> відпустки — це <b>${workW(vac)}</b> на рік. Вихідні (day-off) беруться з цих самих днів. Рахуються лише робочі дні.</li>
-          <li>Відпустку можна брати <b>наперед</b>, у межах доступних днів. У разі звільнення дні, використані понад нараховане, <b>віднімаються від зарплати</b>.</li>`;
-            const sickNew = l => `<li>Лікарняних — <b>${workW(l)}</b> на рік.</li>`;
-            return D.newSystem === false && D.newFrom
-              ? `<li>До <b>${humanY(yearLast())}</b> (кінець вашого робочого року) для вас діють попередні правила: <b>${unitDaysW(D.limits ? D.limits.vacation : 30, "calendar")}</b> відпустки і <b>${unitDaysW(D.limits ? D.limits.sick : 7, "calendar")}</b> лікарняних на рік (разом із суботою й неділею).</li>
-          <li>📌 З <b>${humanY(D.newFrom)}</b> (ваш новий робочий рік) у вас діятиме нова система:</li>${sys(ln.vacation)}<li>Лікарняних — <b>${workW(ln.sick)}</b> на рік (замість ${unitDaysW(Math.round(7 * (D.hours || 8) / 8), "calendar")}).</li>
-          <li>Чому 21, а не 30: відпочинок той самий — приблизно 4 тижні. Просто субота й неділя більше не списуються, тож 21 робочий день ≈ 30 календарних.</li>`
-              : sys(21) + sickNew(D.limits ? D.limits.sick : 4);
-          })()}
-          ${unitCur() === "calendar" && S.type !== "sick" ? `<li>Якщо між двома вашими відпустками/вихідними лише субота й неділя, вони теж рахуються як відпустка.</li>` : ""}
-          <li>Дні діють до <b>${humanY(yearLast())}</b> включно і на наступний рік не переносяться.</li>
-          <li>Якщо днів не лишилось, відпустку за власний рахунок можна оформити індивідуально — зверніться до свого тімліда.</li>
-          <li>${D.approver
-            ? `Ваш запит погоджує <b>${D.approver}</b> — і відпустку, і лікарняний. Відповідь прийде повідомленням у чат з ботом.${D.adminGen && D.admin !== D.approver ? ` Якщо погоджувач відсутній, зверніться до <b>${D.adminGen}</b>.` : ""}`
-            : "Вам погодження не потрібне — запис фіксується одразу."}</li>
-        </ul>
+        ${(() => {
+          const h = D.hours || 8, isOld = D.newSystem === false && D.newFrom, ln = limitsNext();
+          const fullV = Math.round(30 * h / 8), fullS = Math.round(7 * h / 8);
+          const newV = Math.round(21 * h / 8), newS = Math.round(4 * h / 8);
+          const per = fmtNum(1.75 * h / 8);
+          const li = t => `<li>${t}</li>`;
+          const newLines = sw => li(`Відпустка: <b>${per} робочого дня</b> за кожен відпрацьований місяць, тобто <b>${workW(newV)}</b> на рік. Субота й неділя не рахуються${sw ? `, тож це ті самі приблизно 4 тижні відпочинку, що й ${fullV} календарних днів зараз` : ""}.`)
+            + li(`Лікарняні: <b>${workW(newS)}</b> на рік.`)
+            + li(`Відпустку можна брати наперед, ще до того, як дні нарахуються, — у межах річного ліміту. Якщо співпраця завершиться, дні, використані понад нараховане, враховуються в остаточному розрахунку.`);
+          const notes = [];
+          if (h < 8) notes.push(`Ви працюєте ${h} год на день, тому ліміти пропорційні: відпустка ${isOld ? 30 : 21} × ${h}/8 ≈ ${isOld ? fullV : newV}, лікарняні ${isOld ? 7 : 4} × ${h}/8 ≈ ${isOld ? fullS : newS}.`);
+          if (isOld && D.limits) {
+            const six = D.year.hired ? (() => { const d = new Date(D.year.hired + "T00:00:00Z"); d.setUTCMonth(d.getUTCMonth() + 6); return d.toISOString().slice(0, 10); })() : null;
+            if (six && six > D.today) notes.push(`Перші 6 місяців роботи ліміт пропорційний відпрацьованому часу і щодня трохи зростає: зараз у вас <b>${unitDaysW(D.limits.vacation, "calendar")}</b> відпустки і <b>${unitDaysW(D.limits.sick, "calendar")}</b> лікарняних. Повні ${fullV} і ${fullS} календарних днів — з <b>${humanY(six)}</b>.`);
+            else if (D.limits.vacation < fullV) notes.push(`Цього робочого року у вас <b>${unitDaysW(D.limits.vacation, "calendar")}</b> відпустки замість ${fullV}: минулого року було використано на ${unitDaysW(Math.round((fullV - D.limits.vacation) * 100) / 100, "calendar")} більше за ліміт, і ці дні враховано зараз.`);
+            else if (D.limits.vacation > fullV) notes.push(`Цього робочого року у вас <b>${unitDaysW(D.limits.vacation, "calendar")}</b> відпустки замість ${fullV} — за індивідуальною домовленістю.`);
+          }
+          const carry = isOld && ln.vacation < newV ? li(`У перший рік нової системи у вас буде <b>${workW(ln.vacation)}</b> відпустки замість ${newV}: цього року використано більше за ліміт, у перерахунку на робочі дні — ${newV - ln.vacation}.`) : "";
+          const general = `<p class="rules-h"><b>Загальне:</b></p><ul>
+            ${li("Вихідний (day-off) береться з днів відпустки.")}
+            ${li(`Невикористані дні на наступний робочий рік не переносяться. ${D.year.hired ? `Ваш робочий рік рахується від дати прийняття (${dots(D.year.hired)}).` : "Ваш робочий рік збігається з календарним."}`)}
+            ${li("Якщо днів не лишилось, відпустку за власний рахунок можна оформити індивідуально — зверніться до свого тімліда.")}
+            ${li(D.approver
+              ? `Ваш запит погоджує <b>${D.approver}</b> — і відпустку, і лікарняний. Відповідь прийде повідомленням у чат з ботом.${D.adminGen && D.admin !== D.approver ? ` Якщо погоджувача немає на місці, зверніться до <b>${D.adminGen}</b>.` : ""}`
+              : "Погоджувати вам не потрібно — запис одразу з'являється в таблиці.")}
+          </ul>`;
+          return isOld
+            ? `<p class="rules-h"><b>Зараз — до ${humanY(yearLast())} включно:</b></p><ul>
+            ${li(`Відпустка: <b>${unitDaysW(fullV, "calendar")}</b> на рік, лікарняні: <b>${unitDaysW(fullS, "calendar")}</b>. Субота й неділя рахуються.`)}
+            ${li("Якщо між двома вашими відпустками чи вихідними (day-off) лише субота й неділя, вони теж списуються як відпустка.")}
+            ${notes.map(li).join("")}</ul>
+            <p class="rules-h"><b>📌 З ${humanY(D.newFrom)} — нова система:</b></p><ul>${newLines(true)}${carry}</ul>${general}`
+            : `<ul>${newLines(false)}${notes.map(li).join("")}</ul>${general}`;
+        })()}
       </details>
     </div>
     ${IS_DEMO && !inTg ? `<div class="demo">Демо-режим ·
@@ -576,7 +592,7 @@ function hasWeekend(a, b) {
 
 function onDay(day) {
   if (day < D.today) return toast("Цей день уже минув. Запит можна подати лише на сьогодні або майбутні дні.");
-  if (day > lastAllowed) return toast(`Так далеко наперед запит подати не можна — не пізніше ${dots(lastAllowed)}.`);
+  if (day > lastAllowed) return toast(`Запит можна подати на дати до ${dots(lastAllowed)} включно.`);
   const b = busyOn(day);
   if (b && (!S.start || S.end)) return toast(`Цей день уже зайнятий — ${busyLabel(b)}.`);
   if (!S.start || S.end) { S.start = day; S.end = null; }
